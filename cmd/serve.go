@@ -45,6 +45,12 @@ var serveCmd = &cobra.Command{
 		cmd.Printf("[serve] PostgreSQL connected at %s:%d/%s\n", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
 		cmd.Printf("[serve] Initializing application dependencies...\n")
 
+		setupRepo := repository.NewPostgresSystemSetupRepository(db)
+		ensureSetupUseCase := services.NewEnsureSystemSetupUseCase(setupRepo)
+		if err := ensureSetupUseCase.Execute(context.Background()); err != nil {
+			return err
+		}
+
 		eventRepo := repository.NewPostgresTechnicalEventRepository(db)
 		registerUseCase := services.NewRegisterTechnicalEventUseCase(eventRepo)
 
