@@ -3,20 +3,29 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+
+	"svitorz/tracelog/internal/core/services"
 )
 
-// Server representa o servidor HTTP da aplicação.
+// Server is the main HTTP server for the MVP.
 type Server struct {
-	addr string
-	mux  *http.ServeMux
+	addr         string
+	mux          *http.ServeMux
+	eventHandler *EventHandler
 }
 
-func NewServer(addr string) *Server {
+func NewServer(addr string, registerUseCase *services.RegisterTechnicalEventUseCase) *Server {
 	mux := http.NewServeMux()
-	s := &Server{addr: addr, mux: mux}
+	eventHandler := NewEventHandler(registerUseCase)
+
+	s := &Server{
+		addr:         addr,
+		mux:          mux,
+		eventHandler: eventHandler,
+	}
 
 	mux.HandleFunc("/health", s.handleHealth)
-	mux.HandleFunc("/events", s.handleEvents)
+	mux.HandleFunc("/events", eventHandler.HandleRegisterEvent)
 
 	return s
 }
@@ -28,14 +37,4 @@ func (s *Server) Start() error {
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	// TODO: validar e persistir evento no PostgreSQL.
-	w.WriteHeader(http.StatusAccepted)
 }
