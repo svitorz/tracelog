@@ -3,6 +3,8 @@ services:
     image: postgres:16-alpine
     container_name: tracelog-postgres
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
