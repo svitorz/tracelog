@@ -44,7 +44,7 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 		ExternalID:       req.ExternalID,
 		OccurredAt:       occurredAt,
 		Message:          req.Message,
-		Severity:         domain.Severity(req.Severity),
+		Severity:         req.Severity,
 		Category:         domain.EventCategory(req.Category),
 		Payload:          req.Payload,
 		TraceID:          req.TraceID,

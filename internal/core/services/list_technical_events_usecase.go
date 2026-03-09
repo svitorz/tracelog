@@ -36,6 +36,8 @@ func (uc *ListTechnicalEventsUseCase) Execute(ctx context.Context, input ListTec
 		return nil, fmt.Errorf("technical event repository is required")
 	}
 
+	input.Severity = domain.NormalizeSeverity(input.Severity)
+
 	if input.Severity != "" && !isValidSeverity(input.Severity) {
 		return nil, fmt.Errorf("severity is invalid")
 	}

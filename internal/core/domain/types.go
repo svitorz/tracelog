@@ -1,5 +1,7 @@
 package domain
 
+import "strings"
+
 // Severity represents the severity level of a technical event.
 type Severity string
 
@@ -10,6 +12,11 @@ const (
 	SeverityError Severity = "error"
 	SeverityFatal Severity = "fatal"
 )
+
+// NormalizeSeverity trims and lowercases a severity value for comparisons and persistence.
+func NormalizeSeverity(value Severity) Severity {
+	return Severity(strings.ToLower(strings.TrimSpace(string(value))))
+}
 
 // EventCategory represents the functional category of the event.
 type EventCategory string

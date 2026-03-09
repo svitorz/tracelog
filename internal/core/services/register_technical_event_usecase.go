@@ -15,7 +15,7 @@ type RegisterTechnicalEventInput struct {
 	ExternalID       string
 	OccurredAt       time.Time
 	Message          string
-	Severity         domain.Severity
+	Severity         string
 	Category         domain.EventCategory
 	Payload          map[string]any
 	TraceID          string
@@ -53,6 +53,8 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 		payload = map[string]any{}
 	}
 
+	severity := parseSeverity(input.Severity)
+
 	category := input.Category
 	if category == "" {
 		category = domain.CategoryApplication
@@ -63,7 +65,7 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 		OccurredAt:       input.OccurredAt,
 		ReceivedAt:       uc.now().UTC(),
 		Message:          strings.TrimSpace(input.Message),
-		Severity:         input.Severity,
+		Severity:         severity,
 		Category:         category,
 		Payload:          payload,
 		TraceID:          strings.TrimSpace(input.TraceID),
@@ -88,10 +90,11 @@ func validateRegisterTechnicalEventInput(input RegisterTechnicalEventInput) erro
 	if strings.TrimSpace(input.Message) == "" {
 		return fmt.Errorf("message is required")
 	}
-	if input.Severity == "" {
+	severity := parseSeverity(input.Severity)
+	if severity == "" {
 		return fmt.Errorf("severity is required")
 	}
-	if !isValidSeverity(input.Severity) {
+	if !isValidSeverity(severity) {
 		return fmt.Errorf("severity is invalid")
 	}
 	if strings.TrimSpace(input.ApplicationID) == "" {
@@ -114,6 +117,8 @@ func validateRegisterTechnicalEventInput(input RegisterTechnicalEventInput) erro
 }
 
 func isValidSeverity(value domain.Severity) bool {
+	value = domain.NormalizeSeverity(value)
+
 	switch value {
 	case domain.SeverityDebug,
 		domain.SeverityInfo,
@@ -124,6 +129,10 @@ func isValidSeverity(value domain.Severity) bool {
 	default:
 		return false
 	}
+}
+
+func parseSeverity(value string) domain.Severity {
+	return domain.NormalizeSeverity(domain.Severity(value))
 }
 
 func isValidIngestionChannel(value domain.IngestionChannel) bool {
