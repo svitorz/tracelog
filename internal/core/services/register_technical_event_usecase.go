@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -15,7 +16,6 @@ type RegisterTechnicalEventInput struct {
 	ExternalID       string
 	OccurredAt       time.Time
 	Message          string
-	Severity         string
 	Category         domain.EventCategory
 	Payload          map[string]any
 	TraceID          string
@@ -53,12 +53,12 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 		payload = map[string]any{}
 	}
 
-	severity := parseSeverity(input.Severity)
-
 	category := input.Category
 	if category == "" {
 		category = domain.CategoryApplication
 	}
+
+	severity := deriveSeverity(strings.TrimSpace(input.Message), category, payload)
 
 	event := &domain.TechnicalEvent{
 		ExternalID:       strings.TrimSpace(input.ExternalID),
@@ -89,13 +89,6 @@ func validateRegisterTechnicalEventInput(input RegisterTechnicalEventInput) erro
 	}
 	if strings.TrimSpace(input.Message) == "" {
 		return fmt.Errorf("message is required")
-	}
-	severity := parseSeverity(input.Severity)
-	if severity == "" {
-		return fmt.Errorf("severity is required")
-	}
-	if !isValidSeverity(severity) {
-		return fmt.Errorf("severity is invalid")
 	}
 	if strings.TrimSpace(input.ApplicationID) == "" {
 		return fmt.Errorf("application_id is required")
@@ -131,10 +124,6 @@ func isValidSeverity(value domain.Severity) bool {
 	}
 }
 
-func parseSeverity(value string) domain.Severity {
-	return domain.NormalizeSeverity(domain.Severity(value))
-}
-
 func isValidIngestionChannel(value domain.IngestionChannel) bool {
 	switch value {
 	case domain.IngestionHTTP,
@@ -143,5 +132,96 @@ func isValidIngestionChannel(value domain.IngestionChannel) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func deriveSeverity(message string, category domain.EventCategory, payload map[string]any) domain.Severity {
+	content := strings.ToLower(strings.TrimSpace(message))
+
+	if containsAny(content, "panic", "fatal", "unrecoverable", "crash") || payloadHasSignal(payload, "panic", "fatal", "stack_trace") {
+		return domain.SeverityFatal
+	}
+
+	if containsAny(content, "error", "failed", "failure", "timeout", "exception", "unauthorized", "denied") ||
+		payloadHasSignal(payload, "error", "errors", "exception", "exception_message") {
+		return domain.SeverityError
+	}
+
+	if category == domain.CategorySecurity ||
+		containsAny(content, "warn", "warning", "retry", "deprecated", "slow", "fallback") ||
+		payloadHasSignal(payload, "warning", "warnings", "retry_count") {
+		return domain.SeverityWarn
+	}
+
+	return domain.SeverityInfo
+}
+
+func containsAny(value string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(value, needle) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func payloadHasSignal(payload map[string]any, keys ...string) bool {
+	if len(payload) == 0 {
+		return false
+	}
+
+	for _, key := range keys {
+		value, ok := payload[key]
+		if !ok {
+			continue
+		}
+
+		if hasMeaningfulSignal(value) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasMeaningfulSignal(value any) bool {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v) != ""
+	case bool:
+		return v
+	case int:
+		return v > 0
+	case int8:
+		return v > 0
+	case int16:
+		return v > 0
+	case int32:
+		return v > 0
+	case int64:
+		return v > 0
+	case uint:
+		return v > 0
+	case uint8:
+		return v > 0
+	case uint16:
+		return v > 0
+	case uint32:
+		return v > 0
+	case uint64:
+		return v > 0
+	case float32:
+		return v > 0
+	case float64:
+		return v > 0
+	default:
+		rv := reflect.ValueOf(value)
+		switch rv.Kind() {
+		case reflect.Slice, reflect.Array, reflect.Map:
+			return rv.Len() > 0
+		default:
+			return value != nil
+		}
 	}
 }

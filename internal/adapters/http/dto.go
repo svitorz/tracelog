@@ -9,7 +9,6 @@ type RegisterEventRequest struct {
 	ExternalID    string         `json:"external_id"`
 	OccurredAt    string         `json:"occurred_at"`
 	Message       string         `json:"message"`
-	Severity      string         `json:"severity"`
 	Category      string         `json:"category,omitempty"`
 	Payload       map[string]any `json:"payload,omitempty"`
 	TraceID       string         `json:"trace_id,omitempty"`
