@@ -32,6 +32,19 @@ type DBConfig struct {
 	SSLMode  string
 }
 
+// DSN monta a string de conexão PostgreSQL para uso em adapters.
+func (d DBConfig) DSN() string {
+	return fmt.Sprintf(
+		"host=%s port=%d dbname=%s user=%s password=%s sslmode=%s",
+		d.Host,
+		d.Port,
+		d.Name,
+		d.User,
+		d.Password,
+		d.SSLMode,
+	)
+}
+
 // Load carrega configuração via ambiente e aplica defaults.
 func Load() (Config, error) {
 	httpPort, err := envInt("HTTP_PORT", 8080)
