@@ -32,7 +32,7 @@ var dbListEnvironmentsCmd = &cobra.Command{
 		defer db.Close()
 
 		rows, err := db.QueryContext(context.Background(), `
-			SELECT id, code, name, description
+			SELECT id, code, name, COALESCE(description, '')
 			FROM environment
 			ORDER BY code
 		`)
@@ -72,7 +72,7 @@ var dbListApplicationsCmd = &cobra.Command{
 		defer db.Close()
 
 		rows, err := db.QueryContext(context.Background(), `
-			SELECT id, name, service_key, description
+			SELECT id, name, service_key, COALESCE(description, '')
 			FROM monitored_application
 			ORDER BY name
 		`)
@@ -112,7 +112,7 @@ var dbListSourcesCmd = &cobra.Command{
 		defer db.Close()
 
 		rows, err := db.QueryContext(context.Background(), `
-			SELECT id, name, source_type, description
+			SELECT id, name, source_type, COALESCE(description, '')
 			FROM event_source
 			ORDER BY name
 		`)
