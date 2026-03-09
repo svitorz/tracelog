@@ -9,6 +9,15 @@ import (
 	"strings"
 )
 
+const (
+	defaultAppName   = "tracelog"
+	defaultAppEnv    = "local"
+	defaultHTTPPort  = 8080
+	defaultDBHost    = "localhost"
+	defaultDBPort    = 5432
+	defaultDBSSLMode = "disable"
+)
+
 // Config concentra toda configuração da aplicação.
 type Config struct {
 	App  AppConfig
@@ -53,31 +62,31 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	httpPort, err := envInt("HTTP_PORT", 8080)
+	httpPort, err := envInt("HTTP_PORT", defaultHTTPPort)
 	if err != nil {
 		return Config{}, err
 	}
 
-	dbPort, err := envInt("DB_PORT", 5432)
+	dbPort, err := envInt("DB_PORT", defaultDBPort)
 	if err != nil {
 		return Config{}, err
 	}
 
 	cfg := Config{
 		App: AppConfig{
-			Name: envString("APP_NAME", "tracelog"),
-			Env:  envString("APP_ENV", "local"),
+			Name: envString("APP_NAME", defaultAppName),
+			Env:  envString("APP_ENV", defaultAppEnv),
 		},
 		HTTP: HTTPConfig{
 			Port: httpPort,
 		},
 		DB: DBConfig{
-			Host:     envString("DB_HOST", "localhost"),
+			Host:     envString("DB_HOST", defaultDBHost),
 			Port:     dbPort,
-			Name:     envString("DB_NAME", "tracelog"),
-			User:     envString("DB_USER", "postgres"),
-			Password: envString("DB_PASSWORD", ""),
-			SSLMode:  envString("DB_SSLMODE", "disable"),
+			Name:     requiredEnvString("DB_NAME"),
+			User:     requiredEnvString("DB_USER"),
+			Password: requiredEnvString("DB_PASSWORD"),
+			SSLMode:  envString("DB_SSLMODE", defaultDBSSLMode),
 		},
 	}
 
@@ -90,36 +99,48 @@ func Load() (Config, error) {
 
 // Validate aplica regras mínimas de consistência.
 func (c Config) Validate() error {
+	var validationErrors []string
+
 	if strings.TrimSpace(c.App.Name) == "" {
-		return fmt.Errorf("APP_NAME não pode ser vazio")
+		validationErrors = append(validationErrors, "APP_NAME cannot be empty")
 	}
 
 	if strings.TrimSpace(c.App.Env) == "" {
-		return fmt.Errorf("APP_ENV não pode ser vazio")
+		validationErrors = append(validationErrors, "APP_ENV cannot be empty")
 	}
 
 	if err := validatePort(c.HTTP.Port, "HTTP_PORT"); err != nil {
-		return err
+		validationErrors = append(validationErrors, err.Error())
 	}
 
 	if strings.TrimSpace(c.DB.Host) == "" {
-		return fmt.Errorf("DB_HOST não pode ser vazio")
+		validationErrors = append(validationErrors, "DB_HOST cannot be empty")
 	}
 
 	if err := validatePort(c.DB.Port, "DB_PORT"); err != nil {
-		return err
+		validationErrors = append(validationErrors, err.Error())
 	}
 
 	if strings.TrimSpace(c.DB.Name) == "" {
-		return fmt.Errorf("DB_NAME não pode ser vazio")
+		validationErrors = append(validationErrors, "DB_NAME is required")
 	}
 
 	if strings.TrimSpace(c.DB.User) == "" {
-		return fmt.Errorf("DB_USER não pode ser vazio")
+		validationErrors = append(validationErrors, "DB_USER is required")
+	}
+
+	if strings.TrimSpace(c.DB.Password) == "" {
+		validationErrors = append(validationErrors, "DB_PASSWORD is required")
 	}
 
 	if strings.TrimSpace(c.DB.SSLMode) == "" {
-		return fmt.Errorf("DB_SSLMODE não pode ser vazio")
+		validationErrors = append(validationErrors, "DB_SSLMODE cannot be empty")
+	} else if !isValidSSLMode(c.DB.SSLMode) {
+		validationErrors = append(validationErrors, "DB_SSLMODE must be one of disable, allow, prefer, require, verify-ca, verify-full")
+	}
+
+	if len(validationErrors) > 0 {
+		return fmt.Errorf("invalid configuration: %s", strings.Join(validationErrors, "; "))
 	}
 
 	return nil
@@ -142,6 +163,10 @@ func envString(key, fallback string) string {
 	return value
 }
 
+func requiredEnvString(key string) string {
+	return strings.TrimSpace(os.Getenv(key))
+}
+
 func envInt(key string, fallback int) (int, error) {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -154,6 +179,15 @@ func envInt(key string, fallback int) (int, error) {
 	}
 
 	return port, nil
+}
+
+func isValidSSLMode(value string) bool {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+		return true
+	default:
+		return false
+	}
 }
 
 func loadDotEnvIfPresent() error {
