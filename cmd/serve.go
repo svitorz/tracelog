@@ -17,25 +17,33 @@ var (
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Inicializa os componentes de execução local",
+	Short: "Start the local TraceLog HTTP server",
+	Long:  "Initialize and start the HTTP server for receiving technical events.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		port := httpPort
 		if port == 0 {
 			port = appConfig.HTTP.Port
 		}
 
+		if port < 1 || port > 65535 {
+			return fmt.Errorf("invalid HTTP port: %d", port)
+		}
+
+		cmd.Printf("[serve] %s (%s)\n", appConfig.App.Name, appConfig.App.Env)
+		cmd.Printf("[serve] Initializing PostgreSQL connection...\n")
+
 		db, err := repository.OpenPostgres(appConfig.DB)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to open PostgreSQL connection: %w", err)
 		}
 		defer db.Close()
 
 		if err := repository.Ping(context.Background(), db); err != nil {
-			return err
+			return fmt.Errorf("failed to ping PostgreSQL: %w", err)
 		}
 
-		cmd.Printf("[serve] %s (%s) starting on port %d\n", appConfig.App.Name, appConfig.App.Env, port)
-		cmd.Printf("[serve] PostgreSQL OK at %s:%d/%s (%s)\n", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name, appConfig.DB.SSLMode)
+		cmd.Printf("[serve] PostgreSQL connected at %s:%d/%s\n", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
+		cmd.Printf("[serve] Initializing application dependencies...\n")
 
 		eventRepo := repository.NewPostgresTechnicalEventRepository(db)
 		registerUseCase := services.NewRegisterTechnicalEventUseCase(eventRepo)
@@ -43,13 +51,24 @@ var serveCmd = &cobra.Command{
 		addr := fmt.Sprintf(":%d", port)
 		server := httpadapter.NewServer(addr, registerUseCase)
 
-		cmd.Printf("[serve] HTTP server listening...\n")
-		return server.Start()
+		cmd.Printf("[serve] HTTP server listening on port %d\n", port)
+		cmd.Printf("[serve] Ready to receive events at POST /events\n")
+
+		if err := server.Start(); err != nil {
+			return fmt.Errorf("HTTP server failed: %w", err)
+		}
+
+		return nil
 	},
 }
 
 func init() {
-	serveCmd.Flags().IntVar(&httpPort, "http-port", 0, "porta HTTP (sobrescreve HTTP_PORT quando informado)")
-	serveCmd.Example = fmt.Sprintf("%s\n%s", "  tracelog serve", "  tracelog serve --http-port 8081")
+	serveCmd.Flags().IntVar(&httpPort, "http-port", 0, "HTTP port (overrides HTTP_PORT env variable)")
+	serveCmd.Example = fmt.Sprintf(
+		"  # Start with default configuration\n" +
+			"  tracelog serve\n\n" +
+			"  # Start with custom HTTP port\n" +
+			"  tracelog serve --http-port 8081",
+	)
 	rootCmd.AddCommand(serveCmd)
 }

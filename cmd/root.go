@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"svitorz/tracelog/internal/config"
 
 	"github.com/spf13/cobra"
@@ -16,14 +18,18 @@ var rootCmd = &cobra.Command{
 	SilenceErrors: true,
 }
 
-// Execute executa o comando raiz da CLI.
+// Execute loads configuration and executes the root CLI command.
 func Execute() error {
 	cfg, err := config.Load()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	appConfig = cfg
 
-	return rootCmd.Execute()
+	if err := rootCmd.Execute(); err != nil {
+		return fmt.Errorf("command execution failed: %w", err)
+	}
+
+	return nil
 }
