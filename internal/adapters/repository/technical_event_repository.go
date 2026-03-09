@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"svitorz/tracelog/internal/core/domain"
 	"svitorz/tracelog/internal/core/ports"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const defaultFindLimit = 100
@@ -59,7 +62,7 @@ func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *doma
 			environment_id
 		) VALUES (
 			COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()),
-			$2,
+			NULLIF($2, ''),
 			$3,
 			COALESCE($4, NOW()),
 			$5,
@@ -99,6 +102,10 @@ func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *doma
 		event.SourceID,
 		event.EnvironmentID,
 	).Scan(&event.ID, &event.ReceivedAt, &event.CreatedAt); err != nil {
+		if message := friendlyForeignKeyError(err); message != "" {
+			return fmt.Errorf("failed to save technical event: %s", message)
+		}
+
 		return fmt.Errorf("failed to save technical event: %w", err)
 	}
 
@@ -184,6 +191,7 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 	for rows.Next() {
 		var (
 			event         domain.TechnicalEvent
+			externalID    sql.NullString
 			severity      string
 			category      string
 			ingestion     string
@@ -194,7 +202,7 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 
 		if err := rows.Scan(
 			&event.ID,
-			&event.ExternalID,
+			&externalID,
 			&event.OccurredAt,
 			&event.ReceivedAt,
 			&event.Message,
@@ -212,6 +220,7 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 			return nil, fmt.Errorf("failed to scan technical event: %w", err)
 		}
 
+		event.ExternalID = externalID.String
 		event.Severity = domain.Severity(severity)
 		event.Category = domain.EventCategory(category)
 		event.IngestionChannel = domain.IngestionChannel(ingestion)
@@ -237,3 +246,21 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 }
 
 var _ ports.TechnicalEventRepository = (*PostgresTechnicalEventRepository)(nil)
+
+func friendlyForeignKeyError(err error) string {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
+		return ""
+	}
+
+	switch pgErr.ConstraintName {
+	case "fk_technical_event_application":
+		return "application_id does not reference an existing application"
+	case "fk_technical_event_source":
+		return "source_id does not reference an existing source"
+	case "fk_technical_event_environment":
+		return "environment_id does not reference an existing environment"
+	default:
+		return "one or more referenced IDs do not exist"
+	}
+}
