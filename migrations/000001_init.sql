@@ -1,0 +1,2 @@
+-- Migração inicial (placeholder)
+-- Estruturas de tabelas de eventos serão adicionadas no próximo passo.
