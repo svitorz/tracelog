@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS event_source (
 
 CREATE TABLE IF NOT EXISTS technical_event (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    external_id VARCHAR(255) NOT NULL,
+    external_id VARCHAR(255),
     occurred_at TIMESTAMPTZ NOT NULL,
     received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     message TEXT NOT NULL,
@@ -72,13 +72,5 @@ CREATE INDEX IF NOT EXISTS idx_technical_event_trace_id
 
 CREATE INDEX IF NOT EXISTS idx_technical_event_correlation_id
     ON technical_event (correlation_id);
-
-INSERT INTO environment (code, name, description)
-VALUES
-    ('local', 'Local', 'Local development environment'),
-    ('dev', 'Development', 'Shared development environment'),
-    ('staging', 'Staging', 'Pre-production environment'),
-    ('prod', 'Production', 'Production environment')
-ON CONFLICT (code) DO NOTHING;
 
 COMMIT;
