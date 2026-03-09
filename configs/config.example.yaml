@@ -1,0 +1,8 @@
+app:
+  name: tracelog
+
+http:
+  addr: ":8080"
+
+postgres:
+  dsn: "postgres://postgres:postgres@localhost:5432/tracelog?sslmode=disable"
