@@ -16,7 +16,7 @@ During development and debugging, developers often need to:
 
 TraceLog provides a centralized, local solution for these needs without requiring complex infrastructure or cloud services. It's designed for developers who want quick insights into their applications' behavior during development and testing phases.
 
-## Features (MVP)
+## Features 
 
 - **Event Ingestion**: HTTP API to receive technical events from applications
 - **Event Storage**: PostgreSQL-backed persistence with full event history
@@ -29,7 +29,7 @@ TraceLog provides a centralized, local solution for these needs without requirin
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.25+
 - Docker and Docker Compose (for PostgreSQL)
 - Git
 
