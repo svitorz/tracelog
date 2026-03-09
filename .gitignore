@@ -1,0 +1,26 @@
+# Environment variables (local configuration)
+.env
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test coverage
+*.out
+coverage.txt
+coverage.html
+
+# OS files
+.DS_Store
+Thumbs.db
