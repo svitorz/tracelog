@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+
+	"svitorz/tracelog/internal/adapters/repository"
 
 	"github.com/spf13/cobra"
 )
@@ -19,9 +22,19 @@ var serveCmd = &cobra.Command{
 			port = appConfig.HTTP.Port
 		}
 
+		db, err := repository.OpenPostgres(appConfig.DB)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+
+		if err := repository.Ping(context.Background(), db); err != nil {
+			return err
+		}
+
 		// Placeholder: bootstrap real de HTTP virá em etapa futura.
 		cmd.Printf("[serve] %s (%s) porta HTTP %d\n", appConfig.App.Name, appConfig.App.Env, port)
-		cmd.Printf("[serve] conexão DB prevista em %s:%d/%s (%s)\n", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name, appConfig.DB.SSLMode)
+		cmd.Printf("[serve] PostgreSQL OK em %s:%d/%s (%s)\n", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name, appConfig.DB.SSLMode)
 		return nil
 	},
 }
