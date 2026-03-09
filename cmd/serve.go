@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	httpadapter "svitorz/tracelog/internal/adapters/http"
 	"svitorz/tracelog/internal/adapters/repository"
+	"svitorz/tracelog/internal/core/services"
 
 	"github.com/spf13/cobra"
 )
@@ -32,10 +34,17 @@ var serveCmd = &cobra.Command{
 			return err
 		}
 
-		// Placeholder: bootstrap real de HTTP virá em etapa futura.
-		cmd.Printf("[serve] %s (%s) porta HTTP %d\n", appConfig.App.Name, appConfig.App.Env, port)
-		cmd.Printf("[serve] PostgreSQL OK em %s:%d/%s (%s)\n", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name, appConfig.DB.SSLMode)
-		return nil
+		cmd.Printf("[serve] %s (%s) starting on port %d\n", appConfig.App.Name, appConfig.App.Env, port)
+		cmd.Printf("[serve] PostgreSQL OK at %s:%d/%s (%s)\n", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name, appConfig.DB.SSLMode)
+
+		eventRepo := repository.NewPostgresTechnicalEventRepository(db)
+		registerUseCase := services.NewRegisterTechnicalEventUseCase(eventRepo)
+
+		addr := fmt.Sprintf(":%d", port)
+		server := httpadapter.NewServer(addr, registerUseCase)
+
+		cmd.Printf("[serve] HTTP server listening...\n")
+		return server.Start()
 	},
 }
 
