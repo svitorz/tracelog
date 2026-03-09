@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -47,6 +49,10 @@ func (d DBConfig) DSN() string {
 
 // Load carrega configuração via ambiente e aplica defaults.
 func Load() (Config, error) {
+	if err := loadDotEnvIfPresent(); err != nil {
+		return Config{}, err
+	}
+
 	httpPort, err := envInt("HTTP_PORT", 8080)
 	if err != nil {
 		return Config{}, err
@@ -148,4 +154,62 @@ func envInt(key string, fallback int) (int, error) {
 	}
 
 	return port, nil
+}
+
+func loadDotEnvIfPresent() error {
+	path := filepath.Clean(".env")
+
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+
+		return fmt.Errorf("erro ao abrir .env: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	lineNumber := 0
+
+	for scanner.Scan() {
+		lineNumber++
+		line := strings.TrimSpace(scanner.Text())
+
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("linha inválida no .env (%d)", lineNumber)
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		if key == "" {
+			return fmt.Errorf("chave vazia no .env (%d)", lineNumber)
+		}
+
+		value = strings.Trim(value, "\"'")
+
+		if strings.TrimSpace(os.Getenv(key)) != "" {
+			continue
+		}
+
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("erro ao definir %s via .env: %w", key, err)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("erro ao ler .env: %w", err)
+	}
+
+	return nil
 }
