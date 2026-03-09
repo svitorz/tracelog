@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	httpadapter "svitorz/tracelog/internal/adapters/http"
-
 	"github.com/spf13/cobra"
 )
 
@@ -12,10 +10,11 @@ var (
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Inicia o servidor HTTP do TraceLog",
+	Short: "Inicializa os componentes de execução local",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		server := httpadapter.NewServer(httpAddr)
-		return server.Start()
+		// Placeholder: bootstrap real de HTTP virá em etapa futura.
+		cmd.Printf("[serve] inicialização solicitada em %s\n", httpAddr)
+		return nil
 	},
 }
 
