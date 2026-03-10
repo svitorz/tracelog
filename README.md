@@ -54,7 +54,13 @@ TraceLog provides a centralized, local solution for these needs without requirin
    ./scripts/run-migrations.sh
    ```
 
-4. Build the application:
+4. Initialize the local instance:
+
+   ```bash
+   go run . init
+   ```
+
+5. Build the application:
 
    ```bash
    go build -o bin/tracelog
@@ -62,7 +68,26 @@ TraceLog provides a centralized, local solution for these needs without requirin
 
 ## Quick Start
 
-1. **Start the HTTP server**:
+1. **Create the database structure**:
+
+   ```bash
+   ./scripts/run-migrations.sh
+   ```
+
+2. **Configure the local instance**:
+
+   ```bash
+   go run . init
+   ```
+
+   The command asks for:
+   - default monitored application
+   - default environment
+   - default event source
+
+   At the end, it prints the IDs created or updated in the database.
+
+3. **Start the HTTP server**:
 
    ```bash
    go run . serve
@@ -70,26 +95,33 @@ TraceLog provides a centralized, local solution for these needs without requirin
 
    The server will start on `http://localhost:8080` (configurable via `.env` file).
 
-2. **Send a test event**:
+4. **Send a test event**:
 
    ```bash
    curl -X POST http://localhost:8080/events \
      -H "Content-Type: application/json" \
      -d '{
        "message": "Database connection timeout",
-       "severity": "error",
        "occurred_at": "2026-03-09T14:30:00Z",
-       "ingestion_channel": "http"
+       "application_id": "<application-id-from-init>",
+       "source_id": "<source-id-from-init>",
+       "environment_id": "<environment-id-from-init>",
+       "payload": {
+         "retry_count": 3,
+         "timeout_ms": 5000
+       }
      }'
    ```
 
-3. **Query events via CLI**:
+   TraceLog defines the persisted severity internally based on the event data.
+
+5. **Query events via CLI**:
 
    ```bash
    go run . events list --severity error
    ```
 
-4. **View error frequency metrics**:
+6. **View error frequency metrics**:
 
    ```bash
    go run . metrics errors
@@ -102,13 +134,11 @@ A complete event payload includes:
 ```json
 {
   "message": "User authentication failed",
-  "severity": "error",
   "occurred_at": "2026-03-09T14:30:00Z",
-  "ingestion_channel": "http",
-  "application_id": "550e8400-e29b-41d4-a716-446655440000",
-  "source_id": "660e8400-e29b-41d4-a716-446655440001",
-  "environment_id": "770e8400-e29b-41d4-a716-446655440002",
-  "metadata": {
+  "application_id": "<application-id>",
+  "source_id": "<source-id>",
+  "environment_id": "<environment-id>",
+  "payload": {
     "user_id": "12345",
     "ip_address": "192.168.1.1",
     "endpoint": "/api/login"
@@ -116,13 +146,18 @@ A complete event payload includes:
 }
 ```
 
-**Severity levels**: `info`, `warning`, `error`, `critical`
+**Persisted severity levels**: `info`, `warn`, `error`, `fatal`
+
+TraceLog does not trust a client-provided `severity` field on HTTP ingestion. The application classifies severity internally from the message, category, and payload signals.
 
 ## CLI Usage
 
 ### Server Management
 
 ```bash
+# Configure the minimum local setup
+go run . init
+
 # Start HTTP server (default port 8080)
 go run . serve
 
@@ -171,9 +206,11 @@ go run . db list applications
 # List event sources
 go run . db list sources
 
-# Re-seed default data (idempotent)
+# Optional generic seed command
 go run . seed
 ```
+
+`go run . seed` is currently a no-op for the MVP. Real local instance configuration must be done with `go run . init`.
 
 ## Roadmap
 
