@@ -7,6 +7,7 @@ TraceLog is a local technical event monitoring MVP built in Go with PostgreSQL. 
 The current MVP supports:
 
 - HTTP ingestion through `POST /events`
+- file ingestion through `tracelog import logs --file ...`
 - PostgreSQL-backed event persistence
 - Interactive local bootstrap through `tracelog init`
 - Event listing through the CLI
@@ -142,6 +143,13 @@ go run . events list --environment-id <uuid>
 go run . events list --from 2026-03-01 --to 2026-03-09
 ```
 
+### File ingestion
+
+```bash
+go run . import logs --file ./app.log
+go run . import logs --file ./app.log --file ./worker.log
+```
+
 ### Metrics
 
 ```bash
@@ -179,6 +187,7 @@ Important current behaviors:
 - `category` may be normalized to `unknown`
 - invalid or missing `occurred_at` may fall back to `received_at`
 - normalization details may be preserved inside the stored payload
+- file ingestion preserves `raw_line`, `normalization_status`, and `parse_error` when available
 
 ## Additional Documentation
 

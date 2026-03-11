@@ -181,6 +181,52 @@ No events found for the provided filters.
 
 ---
 
+### import logs
+
+Import technical events from one or more log files.
+
+**Usage**:
+```bash
+tracelog import logs --file PATH [--file PATH...]
+```
+
+**Description**:
+
+Reads each file line by line and tries to normalize the maximum possible amount of information from each record. The importer currently supports:
+
+- JSON log lines
+- `timestamp + level + message` log lines
+- plain text fallback
+
+Each persisted event uses `ingestion_channel=file` and preserves import metadata, including raw line content and parser errors when available.
+
+**Flags**:
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--file` | string array | required | Path to a log file to import. Repeat the flag for multiple files. |
+
+**Examples**:
+
+```bash
+tracelog import logs --file ./app.log
+tracelog import logs --file ./app.log --file ./worker.log
+```
+
+**Output**:
+
+```
+Log import summary
+Files processed: 2
+Lines read: 482
+Persisted: 482
+Normalized: 301
+Partially interpreted: 143
+Uncategorizable: 38
+```
+
+---
+
 ### metrics errors
 
 Display error frequency metrics grouped by day.
