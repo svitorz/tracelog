@@ -26,6 +26,7 @@ const (
 	CategorySystem      EventCategory = "system"
 	CategorySecurity    EventCategory = "security"
 	CategoryAudit       EventCategory = "audit"
+	CategoryUnknown     EventCategory = "unknown"
 )
 
 // IngestionChannel represents how the event entered the system.
