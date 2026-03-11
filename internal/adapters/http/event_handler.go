@@ -3,9 +3,8 @@ package http
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
-	"time"
 
 	"svitorz/tracelog/internal/core/domain"
 	"svitorz/tracelog/internal/core/services"
@@ -28,21 +27,23 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var req RegisterEventRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON payload: %v", err))
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to read request body")
 		return
 	}
 
-	occurredAt, err := parseOccurredAt(req.OccurredAt)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid occurred_at: %v", err))
-		return
+	var req RegisterEventRequest
+	var decodeError string
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &req); err != nil {
+			decodeError = err.Error()
+		}
 	}
 
 	input := services.RegisterTechnicalEventInput{
 		ExternalID:       req.ExternalID,
-		OccurredAt:       occurredAt,
+		OccurredAt:       req.OccurredAt,
 		Message:          req.Message,
 		Category:         domain.EventCategory(req.Category),
 		Payload:          req.Payload,
@@ -52,11 +53,13 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 		ApplicationID:    req.ApplicationID,
 		SourceID:         req.SourceID,
 		EnvironmentID:    req.EnvironmentID,
+		RawRequestBody:   string(body),
+		DecodeError:      decodeError,
 	}
 
 	event, err := h.registerUseCase.Execute(context.Background(), input)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -68,29 +71,6 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 	}
 
 	respondJSON(w, http.StatusCreated, response)
-}
-
-func parseOccurredAt(value string) (time.Time, error) {
-	if value == "" {
-		return time.Time{}, fmt.Errorf("occurred_at is required")
-	}
-
-	formats := []string{
-		time.RFC3339,
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02T15:04:05",
-		"2006-01-02 15:04:05",
-	}
-
-	for _, format := range formats {
-		t, err := time.Parse(format, value)
-		if err == nil {
-			return t, nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("unsupported format (use RFC3339)")
 }
 
 func respondJSON(w http.ResponseWriter, status int, data any) {

@@ -52,7 +52,7 @@ var serveCmd = &cobra.Command{
 		}
 
 		eventRepo := repository.NewPostgresTechnicalEventRepository(db)
-		registerUseCase := services.NewRegisterTechnicalEventUseCase(eventRepo)
+		registerUseCase := services.NewRegisterTechnicalEventUseCase(eventRepo, setupRepo)
 
 		addr := fmt.Sprintf(":%d", port)
 		server := httpadapter.NewServer(addr, registerUseCase)
