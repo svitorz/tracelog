@@ -1,233 +1,194 @@
 # TraceLog
 
-A local technical event monitoring system that helps developers understand error patterns and system behavior.
+TraceLog is a local technical event monitoring MVP built in Go with PostgreSQL. It receives events over HTTP, stores them in a relational database, and exposes CLI commands to inspect stored events and basic error metrics.
 
-## Project Overview
+## Project Scope
 
-TraceLog is a lightweight Go application designed to receive, store, and analyze technical events from your applications. It provides an HTTP API for event ingestion and a CLI for querying and analyzing event data. Built with simplicity in mind, it runs entirely on your local machine with minimal setup.
+The current MVP supports:
 
-## Motivation
+- HTTP ingestion through `POST /events`
+- PostgreSQL-backed event persistence
+- Interactive local bootstrap through `tracelog init`
+- Event listing through the CLI
+- Error frequency reporting through the CLI
 
-During development and debugging, developers often need to:
-- Track errors and warnings across multiple applications
-- Understand when and how often specific issues occur
-- Identify patterns in system behavior
-- Correlate events across different environments
+The current MVP does not provide dashboards, background consumers, alerting, or automated environment provisioning.
 
-TraceLog provides a centralized, local solution for these needs without requiring complex infrastructure or cloud services. It's designed for developers who want quick insights into their applications' behavior during development and testing phases.
-
-## Features 
-
-- **Event Ingestion**: HTTP API to receive technical events from applications
-- **Event Storage**: PostgreSQL-backed persistence with full event history
-- **Event Querying**: CLI commands to list and filter events by severity, date range, and application
-- **Error Frequency Analysis**: Built-in metrics to track error patterns over time
-- **Multi-Application Support**: Track events from multiple applications and environments
-- **Hexagonal Architecture**: Clean separation between business logic and infrastructure
-
-## Installation
-
-### Prerequisites
+## Prerequisites
 
 - Go 1.25+
-- Docker and Docker Compose (for PostgreSQL)
+- Docker and Docker Compose
 - Git
 
-### Steps
+## Getting Started
 
-1. Clone the repository:
+TraceLog must be initialized before it can receive events. The `serve` command checks for the minimum system setup and fails if `tracelog init` has not been executed successfully.
 
-   ```bash
-   git clone <repository-url>
-   cd tracelog
-   ```
+For a complete step-by-step guide, see [docs/getting-started.md](/home/svitorz/dev/tracelog/docs/getting-started.md).
 
-2. Start the PostgreSQL database:
-
-   ```bash
-   docker compose up -d
-   ```
-
-3. Run database migrations:
-
-   ```bash
-   ./scripts/run-migrations.sh
-   ```
-
-4. Initialize the local instance:
-
-   ```bash
-   go run . init
-   ```
-
-5. Build the application:
-
-   ```bash
-   go build -o bin/tracelog
-   ```
-
-## Quick Start
-
-1. **Create the database structure**:
-
-   ```bash
-   ./scripts/run-migrations.sh
-   ```
-
-2. **Configure the local instance**:
-
-   ```bash
-   go run . init
-   ```
-
-   The command asks for:
-   - default monitored application
-   - default environment
-   - default event source
-
-   At the end, it prints the IDs created or updated in the database.
-
-3. **Start the HTTP server**:
-
-   ```bash
-   go run . serve
-   ```
-
-   The server will start on `http://localhost:8080` (configurable via `.env` file).
-
-4. **Send a test event**:
-
-   ```bash
-   curl -X POST http://localhost:8080/events \
-     -H "Content-Type: application/json" \
-     -d '{
-       "message": "Database connection timeout",
-       "occurred_at": "2026-03-09T14:30:00Z",
-       "application_id": "<application-id-from-init>",
-       "source_id": "<source-id-from-init>",
-       "environment_id": "<environment-id-from-init>",
-       "payload": {
-         "retry_count": 3,
-         "timeout_ms": 5000
-       }
-     }'
-   ```
-
-   TraceLog defines the persisted severity internally based on the event data.
-
-5. **Query events via CLI**:
-
-   ```bash
-   go run . events list --severity error
-   ```
-
-6. **View error frequency metrics**:
-
-   ```bash
-   go run . metrics errors
-   ```
-
-## Example Event
-
-A complete event payload includes:
-
-```json
-{
-  "message": "User authentication failed",
-  "occurred_at": "2026-03-09T14:30:00Z",
-  "application_id": "<application-id>",
-  "source_id": "<source-id>",
-  "environment_id": "<environment-id>",
-  "payload": {
-    "user_id": "12345",
-    "ip_address": "192.168.1.1",
-    "endpoint": "/api/login"
-  }
-}
-```
-
-**Persisted severity levels**: `info`, `warn`, `error`, `fatal`
-
-TraceLog does not trust a client-provided `severity` field on HTTP ingestion. The application classifies severity internally from the message, category, and payload signals.
-
-## CLI Usage
-
-### Server Management
+### 1. Clone the repository
 
 ```bash
-# Configure the minimum local setup
+git clone <repository-url>
+cd tracelog
+```
+
+### 2. Start PostgreSQL
+
+```bash
+docker compose up -d postgres
+```
+
+### 3. Configure environment variables
+
+Create a local `.env` file if it does not exist:
+
+```bash
+cp .env.example .env
+```
+
+Review the database and HTTP settings in `.env` before continuing.
+
+### 4. Run migrations
+
+```bash
+./scripts/run-migrations.sh
+```
+
+This script applies the SQL files in `migrations/` and starts the `postgres` container if needed.
+
+### 5. Initialize the local MVP
+
+```bash
 go run . init
+```
 
-# Start HTTP server (default port 8080)
+`init` is required. It interactively creates or updates:
+
+- one monitored application
+- one environment
+- one event source
+
+At the end of the command, TraceLog prints the persisted IDs. Keep them available for manual testing and CLI queries.
+
+### 6. Start the HTTP server
+
+```bash
 go run . serve
+```
 
-# Start on custom port
+If the minimum setup is missing, `serve` stops with an error and instructs you to run `tracelog init` first.
+
+### 7. Send an example event
+
+```bash
+curl -X POST http://localhost:8080/events \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Database connection timeout",
+    "occurred_at": "2026-03-09T14:30:00Z",
+    "category": "system",
+    "application_id": "<application-id-from-init>",
+    "source_id": "<source-id-from-init>",
+    "environment_id": "<environment-id-from-init>",
+    "payload": {
+      "retry_count": 3,
+      "timeout_ms": 5000
+    }
+  }'
+```
+
+Notes about current ingestion behavior:
+
+- persisted `severity` is derived internally by the application
+- the API attempts to normalize incomplete or partially malformed payloads
+- the API only returns an HTTP error when it cannot persist any record
+
+### 8. Query stored events
+
+```bash
+go run . events list --limit 10
+```
+
+Example filtered query:
+
+```bash
+go run . events list --severity error
+```
+
+Example metric query:
+
+```bash
+go run . metrics errors
+```
+
+## Common Commands
+
+### Bootstrap and server
+
+```bash
+go run . init
+go run . serve
 go run . serve --http-port 8081
 ```
 
-### Event Queries
+### Event queries
 
 ```bash
-# List all events
 go run . events list
-
-# Filter by severity
 go run . events list --severity error
-
-# Filter by date range
+go run . events list --application-id <uuid>
+go run . events list --environment-id <uuid>
 go run . events list --from 2026-03-01 --to 2026-03-09
-
-# Combine filters
-go run . events list --severity critical --from 2026-03-01
 ```
 
-### Metrics and Analysis
+### Metrics
 
 ```bash
-# Show error frequency by day
 go run . metrics errors
-
-# Error frequency for specific date range
-go run . metrics errors --from 2026-03-01 --to 2026-03-09
-
-# Error frequency for specific application
 go run . metrics errors --application-id <uuid>
+go run . metrics errors --from 2026-03-01 --to 2026-03-09
 ```
 
-### Database Management
+### Database inspection
 
 ```bash
-# List environments (local, dev, staging, prod)
 go run . db list environments
-
-# List registered applications
 go run . db list applications
-
-# List event sources
 go run . db list sources
-
-# Optional generic seed command
-go run . seed
 ```
 
-`go run . seed` is currently a no-op for the MVP. Real local instance configuration must be done with `go run . init`.
+## Event Model Notes
 
-## Roadmap
+The HTTP ingestion endpoint accepts these fields:
 
-Future enhancements planned:
+- `message`
+- `occurred_at`
+- `category`
+- `payload`
+- `external_id`
+- `trace_id`
+- `correlation_id`
+- `application_id`
+- `source_id`
+- `environment_id`
 
-- **RabbitMQ Integration**: Async event ingestion via message queues
-- **Grafana Integration**: Visual dashboards for metrics and trends
-- **Event Correlation**: Link related events across applications
-- **Alerting**: Configurable alerts based on error thresholds
-- **Event Retention Policies**: Automatic cleanup of old events
-- **Advanced Filtering**: Full-text search and complex queries
-- **Export Capabilities**: Export event data in various formats
+Important current behaviors:
+
+- `severity` is not accepted as a trusted client input on HTTP ingestion
+- `category` may be normalized to `unknown`
+- invalid or missing `occurred_at` may fall back to `received_at`
+- normalization details may be preserved inside the stored payload
+
+## Additional Documentation
+
+- [Getting Started](/home/svitorz/dev/tracelog/docs/getting-started.md)
+- [HTTP API](/home/svitorz/dev/tracelog/docs/http-api.md)
+- [CLI Reference](/home/svitorz/dev/tracelog/docs/cli.md)
+- [Architecture](/home/svitorz/dev/tracelog/docs/architecture.md)
+- [Development Notes](/home/svitorz/dev/tracelog/docs/development.md)
+- [Domain Notes](/home/svitorz/dev/tracelog/docs/domain.md)
 
 ## License
 
 MIT License
-
----
-
-**Note**: This project is currently in active development. The feature set represents the MVP state. Contributions and feedback are welcome.
