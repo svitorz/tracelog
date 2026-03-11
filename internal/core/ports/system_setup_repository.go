@@ -17,4 +17,5 @@ type BasicSystemSetup struct {
 type SystemSetupRepository interface {
 	SaveBasicSetup(ctx context.Context, setup BasicSystemSetup) (*BasicSystemSetup, error)
 	HasBasicSetup(ctx context.Context) (bool, error)
+	LoadBasicSetup(ctx context.Context) (*BasicSystemSetup, error)
 }

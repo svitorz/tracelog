@@ -25,6 +25,13 @@ func (r *stubSystemSetupRepository) HasBasicSetup(context.Context) (bool, error)
 	return r.ok, nil
 }
 
+func (r *stubSystemSetupRepository) LoadBasicSetup(context.Context) (*ports.BasicSystemSetup, error) {
+	r.saved.Application.ID = "app-1"
+	r.saved.Environment.ID = "env-1"
+	r.saved.Source.ID = "source-1"
+	return &r.saved, nil
+}
+
 func TestInitializeSystemUseCaseSavesNormalizedSetup(t *testing.T) {
 	repo := &stubSystemSetupRepository{}
 	uc := NewInitializeSystemUseCase(repo)
