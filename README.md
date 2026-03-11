@@ -191,12 +191,12 @@ Important current behaviors:
 
 ## Additional Documentation
 
-- [Getting Started](/home/svitorz/dev/tracelog/docs/getting-started.md)
-- [HTTP API](/home/svitorz/dev/tracelog/docs/http-api.md)
-- [CLI Reference](/home/svitorz/dev/tracelog/docs/cli.md)
-- [Architecture](/home/svitorz/dev/tracelog/docs/architecture.md)
-- [Development Notes](/home/svitorz/dev/tracelog/docs/development.md)
-- [Domain Notes](/home/svitorz/dev/tracelog/docs/domain.md)
+- [Getting Started](./docs/getting-started.md)
+- [HTTP API](./docs/http-api.md)
+- [CLI Reference](./docs/cli.md)
+- [Architecture](./docs/architecture.md)
+- [Development Notes](./docs/development.md)
+- [Domain Notes](./docs/domain.md)
 
 ## License
 
