@@ -37,3 +37,12 @@ const (
 	IngestionCLI  IngestionChannel = "cli"
 	IngestionFile IngestionChannel = "file"
 )
+
+// NormalizationStatus represents the quality level of a normalized event.
+type NormalizationStatus string
+
+const (
+	NormalizationStatusNormalized      NormalizationStatus = "normalized"
+	NormalizationStatusPartial         NormalizationStatus = "partial"
+	NormalizationStatusUncategorizable NormalizationStatus = "uncategorizable"
+)
