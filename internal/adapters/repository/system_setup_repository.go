@@ -73,6 +73,58 @@ func (r *PostgresSystemSetupRepository) HasBasicSetup(ctx context.Context) (bool
 	return ok, nil
 }
 
+func (r *PostgresSystemSetupRepository) LoadBasicSetup(ctx context.Context) (*ports.BasicSystemSetup, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("database connection is nil")
+	}
+
+	query := `
+		SELECT
+			(SELECT id FROM monitored_application ORDER BY created_at ASC LIMIT 1) AS application_id,
+			(SELECT name FROM monitored_application ORDER BY created_at ASC LIMIT 1) AS application_name,
+			(SELECT service_key FROM monitored_application ORDER BY created_at ASC LIMIT 1) AS application_service_key,
+			(SELECT COALESCE(description, '') FROM monitored_application ORDER BY created_at ASC LIMIT 1) AS application_description,
+			(SELECT created_at FROM monitored_application ORDER BY created_at ASC LIMIT 1) AS application_created_at,
+			(SELECT id FROM environment ORDER BY created_at ASC LIMIT 1) AS environment_id,
+			(SELECT code FROM environment ORDER BY created_at ASC LIMIT 1) AS environment_code,
+			(SELECT name FROM environment ORDER BY created_at ASC LIMIT 1) AS environment_name,
+			(SELECT COALESCE(description, '') FROM environment ORDER BY created_at ASC LIMIT 1) AS environment_description,
+			(SELECT created_at FROM environment ORDER BY created_at ASC LIMIT 1) AS environment_created_at,
+			(SELECT id FROM event_source ORDER BY created_at ASC LIMIT 1) AS source_id,
+			(SELECT name FROM event_source ORDER BY created_at ASC LIMIT 1) AS source_name,
+			(SELECT source_type FROM event_source ORDER BY created_at ASC LIMIT 1) AS source_type,
+			(SELECT COALESCE(description, '') FROM event_source ORDER BY created_at ASC LIMIT 1) AS source_description,
+			(SELECT created_at FROM event_source ORDER BY created_at ASC LIMIT 1) AS source_created_at
+	`
+
+	var setup ports.BasicSystemSetup
+	if err := r.db.QueryRowContext(ctx, query).Scan(
+		&setup.Application.ID,
+		&setup.Application.Name,
+		&setup.Application.ServiceKey,
+		&setup.Application.Description,
+		&setup.Application.CreatedAt,
+		&setup.Environment.ID,
+		&setup.Environment.Code,
+		&setup.Environment.Name,
+		&setup.Environment.Description,
+		&setup.Environment.CreatedAt,
+		&setup.Source.ID,
+		&setup.Source.Name,
+		&setup.Source.SourceType,
+		&setup.Source.Description,
+		&setup.Source.CreatedAt,
+	); err != nil {
+		return nil, fmt.Errorf("failed to load basic system setup: %w", err)
+	}
+
+	if setup.Application.ID == "" || setup.Environment.ID == "" || setup.Source.ID == "" {
+		return nil, fmt.Errorf("basic system setup is incomplete")
+	}
+
+	return &setup, nil
+}
+
 func upsertEnvironment(ctx context.Context, tx *sql.Tx, env domain.Environment) (domain.Environment, error) {
 	query := `
 		INSERT INTO environment (code, name, description)
