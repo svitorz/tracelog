@@ -56,6 +56,9 @@ func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *doma
 			payload,
 			trace_id,
 			correlation_id,
+			raw_line,
+			normalization_status,
+			parse_error,
 			ingestion_channel,
 			application_id,
 			source_id,
@@ -71,10 +74,13 @@ func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *doma
 			$8::jsonb,
 			NULLIF($9, ''),
 			NULLIF($10, ''),
-			$11,
-			$12::uuid,
-			$13::uuid,
-			$14::uuid
+			NULLIF($11, ''),
+			$12,
+			NULLIF($13, ''),
+			$14,
+			$15::uuid,
+			$16::uuid,
+			$17::uuid
 		)
 		RETURNING id, received_at, created_at
 	`
@@ -97,6 +103,9 @@ func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *doma
 		string(payloadJSON),
 		event.TraceID,
 		event.CorrelationID,
+		event.RawLine,
+		string(event.NormalizationStatus),
+		event.ParseError,
 		string(event.IngestionChannel),
 		event.ApplicationID,
 		event.SourceID,
@@ -130,6 +139,9 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 			payload,
 			trace_id,
 			correlation_id,
+			raw_line,
+			normalization_status,
+			parse_error,
 			ingestion_channel,
 			application_id,
 			source_id,
@@ -198,6 +210,9 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 			payloadRaw    []byte
 			traceID       sql.NullString
 			correlationID sql.NullString
+			rawLine       sql.NullString
+			normalization string
+			parseError    sql.NullString
 		)
 
 		if err := rows.Scan(
@@ -211,6 +226,9 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 			&payloadRaw,
 			&traceID,
 			&correlationID,
+			&rawLine,
+			&normalization,
+			&parseError,
 			&ingestion,
 			&event.ApplicationID,
 			&event.SourceID,
@@ -226,6 +244,9 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 		event.IngestionChannel = domain.IngestionChannel(ingestion)
 		event.TraceID = traceID.String
 		event.CorrelationID = correlationID.String
+		event.RawLine = rawLine.String
+		event.NormalizationStatus = domain.NormalizationStatus(normalization)
+		event.ParseError = parseError.String
 
 		if len(payloadRaw) == 0 {
 			event.Payload = map[string]any{}

@@ -14,19 +14,22 @@ import (
 
 // RegisterTechnicalEventInput defines the input payload for registering a technical event.
 type RegisterTechnicalEventInput struct {
-	ExternalID       string
-	OccurredAt       string
-	Message          string
-	Category         domain.EventCategory
-	Payload          map[string]any
-	TraceID          string
-	CorrelationID    string
-	IngestionChannel domain.IngestionChannel
-	ApplicationID    string
-	SourceID         string
-	EnvironmentID    string
-	RawRequestBody   string
-	DecodeError      string
+	ExternalID          string
+	OccurredAt          string
+	Message             string
+	Category            domain.EventCategory
+	Payload             map[string]any
+	TraceID             string
+	CorrelationID       string
+	RawLine             string
+	NormalizationStatus domain.NormalizationStatus
+	ParseError          string
+	IngestionChannel    domain.IngestionChannel
+	ApplicationID       string
+	SourceID            string
+	EnvironmentID       string
+	RawRequestBody      string
+	DecodeError         string
 }
 
 // RegisterTechnicalEventUseCase validates, enriches and persists a technical event.
@@ -75,6 +78,9 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 	message, messageNotes := normalizeMessage(input.Message)
 	notes = append(notes, messageNotes...)
 
+	normalizationStatus, statusNotes := normalizeNormalizationStatus(input.NormalizationStatus)
+	notes = append(notes, statusNotes...)
+
 	defaults, defaultsErr := uc.loadFallbackSetupIfNeeded(ctx, input)
 	if defaultsErr != nil {
 		return nil, defaultsErr
@@ -87,19 +93,22 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 	severity := deriveSeverity(message, category, payload)
 
 	event := &domain.TechnicalEvent{
-		ExternalID:       strings.TrimSpace(input.ExternalID),
-		OccurredAt:       occurredAt,
-		ReceivedAt:       receivedAt,
-		Message:          message,
-		Severity:         severity,
-		Category:         category,
-		Payload:          payload,
-		TraceID:          strings.TrimSpace(input.TraceID),
-		CorrelationID:    strings.TrimSpace(input.CorrelationID),
-		IngestionChannel: input.IngestionChannel,
-		ApplicationID:    applicationID,
-		SourceID:         sourceID,
-		EnvironmentID:    environmentID,
+		ExternalID:          strings.TrimSpace(input.ExternalID),
+		OccurredAt:          occurredAt,
+		ReceivedAt:          receivedAt,
+		Message:             message,
+		Severity:            severity,
+		Category:            category,
+		Payload:             payload,
+		TraceID:             strings.TrimSpace(input.TraceID),
+		CorrelationID:       strings.TrimSpace(input.CorrelationID),
+		RawLine:             strings.TrimSpace(input.RawLine),
+		NormalizationStatus: normalizationStatus,
+		ParseError:          strings.TrimSpace(input.ParseError),
+		IngestionChannel:    input.IngestionChannel,
+		ApplicationID:       applicationID,
+		SourceID:            sourceID,
+		EnvironmentID:       environmentID,
 	}
 
 	if err := uc.repo.Save(ctx, event); err != nil {
@@ -206,6 +215,21 @@ func normalizeMessage(raw string) (string, []string) {
 	}
 
 	return message, nil
+}
+
+func normalizeNormalizationStatus(raw domain.NormalizationStatus) (domain.NormalizationStatus, []string) {
+	status := domain.NormalizationStatus(strings.ToLower(strings.TrimSpace(string(raw))))
+
+	switch status {
+	case domain.NormalizationStatusNormalized,
+		domain.NormalizationStatusPartial,
+		domain.NormalizationStatusUncategorizable:
+		return status, nil
+	case "":
+		return domain.NormalizationStatusNormalized, nil
+	default:
+		return domain.NormalizationStatusPartial, []string{fmt.Sprintf("normalization_status %q invalid; defaulted to partial", string(raw))}
+	}
 }
 
 func clonePayload(payload map[string]any) map[string]any {
@@ -375,6 +399,9 @@ func shouldRetryWithFallback(err error) bool {
 
 func deriveSeverity(message string, category domain.EventCategory, payload map[string]any) domain.Severity {
 	content := strings.ToLower(strings.TrimSpace(message))
+	if level, ok := extractSeverityFromPayload(payload); ok {
+		return level
+	}
 
 	if containsAny(content, "panic", "fatal", "unrecoverable", "crash") || payloadHasSignal(payload, "panic", "fatal", "stack_trace") {
 		return domain.SeverityFatal
@@ -392,6 +419,33 @@ func deriveSeverity(message string, category domain.EventCategory, payload map[s
 	}
 
 	return domain.SeverityInfo
+}
+
+func extractSeverityFromPayload(payload map[string]any) (domain.Severity, bool) {
+	if len(payload) == 0 {
+		return "", false
+	}
+
+	rawLevel, ok := payload["level"]
+	if !ok {
+		return "", false
+	}
+
+	level := strings.ToLower(strings.TrimSpace(fmt.Sprint(rawLevel)))
+	switch level {
+	case "trace", "debug":
+		return domain.SeverityDebug, true
+	case "info", "information":
+		return domain.SeverityInfo, true
+	case "warn", "warning":
+		return domain.SeverityWarn, true
+	case "error", "err":
+		return domain.SeverityError, true
+	case "fatal", "critical", "panic":
+		return domain.SeverityFatal, true
+	default:
+		return "", false
+	}
 }
 
 func containsAny(value string, needles ...string) bool {
