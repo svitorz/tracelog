@@ -103,7 +103,7 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 	correlationID := truncateField(input.CorrelationID, "correlation_id", maxCorrelationIDLength, &notes)
 
 	enrichPayload(payload, input.RawRequestBody, input.OccurredAt, input.DecodeError, notes)
-	severity := deriveSeverity(message, category, payload)
+	severity := deriveSeverity(message, category, payload, input.IngestionChannel)
 
 	event := &domain.TechnicalEvent{
 		ExternalID:          externalID,
@@ -424,10 +424,15 @@ func shouldRetryWithFallback(err error) bool {
 	return errors.Is(err, ports.ErrReferenceNotFound)
 }
 
-func deriveSeverity(message string, category domain.EventCategory, payload map[string]any) domain.Severity {
+// deriveSeverity decides the severity on the server. payload.level is trusted only
+// outside HTTP (e.g. the level column of an imported log line): an HTTP client must not
+// set the severity directly (AGENTS.md, seção 4; spec 0002, seção 4.4).
+func deriveSeverity(message string, category domain.EventCategory, payload map[string]any, channel domain.IngestionChannel) domain.Severity {
 	content := strings.ToLower(strings.TrimSpace(message))
-	if level, ok := extractSeverityFromPayload(payload); ok {
-		return level
+	if channel != domain.IngestionHTTP {
+		if level, ok := extractSeverityFromPayload(payload); ok {
+			return level
+		}
 	}
 
 	if containsAny(content, "panic", "fatal", "unrecoverable", "crash") || payloadHasSignal(payload, "panic", "fatal", "stack_trace") {

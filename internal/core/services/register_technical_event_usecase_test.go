@@ -343,3 +343,37 @@ func TestIsUUIDLike(t *testing.T) {
 		}
 	}
 }
+
+func TestRegisterTechnicalEventIgnoresClientLevelOnHTTP(t *testing.T) {
+	tests := []struct {
+		channel domain.IngestionChannel
+		want    domain.Severity
+	}{
+		{domain.IngestionHTTP, domain.SeverityInfo},
+		{domain.IngestionFile, domain.SeverityFatal},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.channel), func(t *testing.T) {
+			uc := NewRegisterTechnicalEventUseCase(&stubTechnicalEventRepository{})
+
+			result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+				Message:          "all good",
+				Payload:          map[string]any{"level": "fatal"},
+				IngestionChannel: tt.channel,
+				ApplicationID:    "550e8400-e29b-41d4-a716-446655440000",
+				SourceID:         "660e8400-e29b-41d4-a716-446655440001",
+				EnvironmentID:    "770e8400-e29b-41d4-a716-446655440002",
+			})
+			if err != nil {
+				t.Fatalf("Execute() unexpected error = %v", err)
+			}
+			if result.Event.Severity != tt.want {
+				t.Fatalf("Severity = %q, want %q", result.Event.Severity, tt.want)
+			}
+			if result.Event.Payload["level"] != "fatal" {
+				t.Fatal("payload.level must still be stored as data")
+			}
+		})
+	}
+}
