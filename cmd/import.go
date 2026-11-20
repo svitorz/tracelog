@@ -73,6 +73,7 @@ func printImportLogsSummary(cmd *cobra.Command, result *services.ImportLogFilesR
 	cmd.Printf("Files processed: %d\n", result.FilesProcessed)
 	cmd.Printf("Lines read: %d\n", result.LinesRead)
 	cmd.Printf("Persisted: %d\n", result.Persisted)
+	cmd.Printf("Blank lines skipped: %d\n", result.BlankSkipped)
 	cmd.Printf("Normalized: %d\n", result.Normalized)
 	cmd.Printf("Partially interpreted: %d\n", result.Partial)
 	cmd.Printf("Uncategorizable: %d\n", result.Uncategorizable)

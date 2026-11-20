@@ -31,9 +31,11 @@ type ImportLogFilesResult struct {
 	LinesRead        int
 	Persisted        int
 	PersistenceError int
-	Normalized       int
-	Partial          int
-	Uncategorizable  int
+	// BlankSkipped counts empty or whitespace-only lines, which are not stored.
+	BlankSkipped    int
+	Normalized      int
+	Partial         int
+	Uncategorizable int
 }
 
 // ImportLogFilesUseCase ingests technical events from one or more files.
@@ -106,7 +108,13 @@ func (uc *ImportLogFilesUseCase) importFile(ctx context.Context, reader io.Reade
 		lineNumber++
 		result.LinesRead++
 
-		parsed := uc.parseLine(scanner.Text())
+		rawLine := scanner.Text()
+		if strings.TrimSpace(rawLine) == "" {
+			result.BlankSkipped++
+			continue
+		}
+
+		parsed := uc.parseLine(rawLine)
 		parsed.Payload = enrichImportedPayload(parsed.Payload, path, lineNumber, parsed.Format, parsed.Parser)
 		category, status := uc.categorizer.Categorize(parsed)
 

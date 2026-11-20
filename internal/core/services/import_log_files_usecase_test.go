@@ -121,3 +121,24 @@ func basicSetupFixture() ports.BasicSystemSetup {
 		Source:      domain.EventSource{ID: "660e8400-e29b-41d4-a716-446655440011"},
 	}
 }
+
+func TestImportLogFilesUseCaseSkipsBlankLines(t *testing.T) {
+	repo := &stubTechnicalEventRepository{}
+	registerUC := NewRegisterTechnicalEventUseCase(repo, &stubSystemSetupRepository{saved: basicSetupFixture()})
+	importUC := NewImportLogFilesUseCase(registerUC)
+	importUC.openFile = func(string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader("first line\n\n   \t\nsecond line\n")), nil
+	}
+
+	result, err := importUC.Execute(context.Background(), ImportLogFilesInput{Files: []string{"app.log"}})
+	if err != nil {
+		t.Fatalf("Execute() unexpected error = %v", err)
+	}
+
+	if result.LinesRead != 4 || result.BlankSkipped != 2 || result.Persisted != 2 {
+		t.Fatalf("LinesRead=%d BlankSkipped=%d Persisted=%d, want 4, 2, 2", result.LinesRead, result.BlankSkipped, result.Persisted)
+	}
+	if repo.saves != 2 {
+		t.Fatalf("repo.Save calls = %d, want 2 (blank lines are not stored)", repo.saves)
+	}
+}
