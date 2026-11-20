@@ -25,7 +25,7 @@ The current MVP does not provide dashboards, background consumers, alerting, or 
 
 TraceLog must be initialized before it can receive events. The `serve` command checks for the minimum system setup and fails if `tracelog init` has not been executed successfully.
 
-For a complete step-by-step guide, see [docs/getting-started.md](/home/svitorz/dev/tracelog/docs/getting-started.md).
+For a complete step-by-step guide, see [docs/getting-started.md](./docs/getting-started.md).
 
 ### 1. Clone the repository
 
