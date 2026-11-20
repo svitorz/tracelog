@@ -412,7 +412,9 @@ func applyFallbackSetup(event *domain.TechnicalEvent, defaults *ports.BasicSyste
 	return notes
 }
 
-var uuidLikePattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+// Any 8-4-4-4-12 hex UUID, as PostgreSQL's uuid type accepts; restricting the version
+// sent v6/v7/v8 IDs silently to the fallback (spec 0002, seção 4.5).
+var uuidLikePattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func isUUIDLike(value string) bool {
 	return uuidLikePattern.MatchString(strings.TrimSpace(value))

@@ -326,3 +326,20 @@ func TestRegisterTechnicalEventKeepsRawBodyOnlyWhenUndecodable(t *testing.T) {
 		})
 	}
 }
+
+func TestIsUUIDLike(t *testing.T) {
+	tests := map[string]bool{
+		"550e8400-e29b-41d4-a716-446655440000": true,  // v4
+		"0190f5a8-7b3c-7d4e-8f5a-1b2c3d4e5f60": true,  // v7
+		"1EC9414C-232A-6B00-B3C8-9E6BDECED846": true,  // v6, maiúsculas
+		"550e8400e29b41d4a716446655440000":     false, // sem hífens
+		"550e8400-e29b-41d4-a716-44665544000g": false,
+		"":                                     false,
+	}
+
+	for value, want := range tests {
+		if got := isUUIDLike(value); got != want {
+			t.Errorf("isUUIDLike(%q) = %v, want %v", value, got, want)
+		}
+	}
+}
