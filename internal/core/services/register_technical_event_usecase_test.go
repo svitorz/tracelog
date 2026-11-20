@@ -293,3 +293,36 @@ func TestRegisterTechnicalEventTruncatesOversizedIdentifiers(t *testing.T) {
 		t.Fatalf("warnings = %q, correlation_id at the limit must not be reported", joined)
 	}
 }
+
+func TestRegisterTechnicalEventKeepsRawBodyOnlyWhenUndecodable(t *testing.T) {
+	tests := []struct {
+		name        string
+		decodeError string
+		wantRawBody bool
+	}{
+		{"decoded body with warnings", "", false},
+		{"undecodable body", "invalid character 'n'", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewRegisterTechnicalEventUseCase(&stubTechnicalEventRepository{}, &stubSystemSetupRepository{saved: basicSetupFixture()})
+
+			result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+				Message:          "x",
+				IngestionChannel: domain.IngestionHTTP,
+				RawRequestBody:   `{"message":"x"}`,
+				DecodeError:      tt.decodeError,
+			})
+			if err != nil {
+				t.Fatalf("Execute() unexpected error = %v", err)
+			}
+
+			meta, _ := result.Event.Payload["_ingestion"].(map[string]any)
+			_, hasRaw := meta["raw_request_body"]
+			if hasRaw != tt.wantRawBody {
+				t.Fatalf("raw_request_body present = %v, want %v (_ingestion = %#v)", hasRaw, tt.wantRawBody, meta)
+			}
+		})
+	}
+}

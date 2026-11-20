@@ -291,11 +291,13 @@ func enrichPayload(payload map[string]any, rawBody string, rawOccurredAt string,
 		}
 	}
 
-	if trimmed := strings.TrimSpace(rawBody); trimmed != "" {
-		ingestion["raw_request_body"] = trimmed
-	}
+	// The raw body is kept only when it could not be decoded: otherwise its content is
+	// already in the event columns and payload, and copying it doubles the storage.
 	if trimmed := strings.TrimSpace(decodeError); trimmed != "" {
 		ingestion["decode_error"] = trimmed
+		if rawTrimmed := strings.TrimSpace(rawBody); rawTrimmed != "" {
+			ingestion["raw_request_body"] = rawTrimmed
+		}
 	}
 	if trimmed := strings.TrimSpace(rawOccurredAt); trimmed != "" {
 		ingestion["original_occurred_at"] = trimmed
