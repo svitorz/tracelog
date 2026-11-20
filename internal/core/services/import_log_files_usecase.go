@@ -373,12 +373,15 @@ func (defaultLogLineCategorizer) Categorize(parsed parsedLogLine) (domain.EventC
 	}
 
 	content := strings.ToLower(strings.TrimSpace(parsed.Message))
+	words := messageWords(content)
 	switch {
-	case containsAny(content, "login", "logout", "auth", "access granted", "permission", "user action", "created by", "updated by"):
-		return domain.CategoryAudit, promoteNormalizationStatus(parsed.NormalizationStatus, domain.NormalizationStatusNormalized)
-	case containsAny(content, "unauthorized", "forbidden", "denied", "token", "credential", "security", "intrusion"):
+	// Security first: "login failed" and "unauthorized" also contain audit words (spec 0004).
+	case hasAnyWord(words, securityWords...) ||
+		(hasAnyWord(words, authenticationWords...) && hasAnyWord(words, authFailureWords...)):
 		return domain.CategorySecurity, promoteNormalizationStatus(parsed.NormalizationStatus, domain.NormalizationStatusNormalized)
-	case containsAny(content, "database", "disk", "memory", "cpu", "network", "timeout", "connection", "postgres", "redis", "kafka"):
+	case hasAnyWord(words, auditWords...) || containsAny(content, auditPhrases...):
+		return domain.CategoryAudit, promoteNormalizationStatus(parsed.NormalizationStatus, domain.NormalizationStatusNormalized)
+	case hasAnyWord(words, systemWords...):
 		return domain.CategorySystem, promoteNormalizationStatus(parsed.NormalizationStatus, domain.NormalizationStatusNormalized)
 	case parsed.Format != "plain_text" && content != "":
 		return domain.CategoryApplication, promoteNormalizationStatus(parsed.NormalizationStatus, domain.NormalizationStatusPartial)
@@ -386,6 +389,16 @@ func (defaultLogLineCategorizer) Categorize(parsed parsedLogLine) (domain.EventC
 		return domain.CategoryUnknown, domain.NormalizationStatusUncategorizable
 	}
 }
+
+// Category keywords, matched as whole words (spec 0004, seção 4.4).
+var (
+	securityWords       = []string{"unauthorized", "forbidden", "denied", "intrusion", "security", "credential", "credentials", "token", "tokens"}
+	authenticationWords = []string{"login", "logon", "signin", "auth", "authentication"}
+	authFailureWords    = []string{"failed", "failure", "invalid", "rejected", "locked"}
+	auditWords          = []string{"login", "logout", "auth", "authentication", "permission"}
+	auditPhrases        = []string{"access granted", "user action", "created by", "updated by"}
+	systemWords         = []string{"database", "disk", "memory", "cpu", "network", "timeout", "timeouts", "connection", "connections", "postgres", "redis", "kafka"}
+)
 
 func promoteNormalizationStatus(current domain.NormalizationStatus, desired domain.NormalizationStatus) domain.NormalizationStatus {
 	if current == domain.NormalizationStatusNormalized {
