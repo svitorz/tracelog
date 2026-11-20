@@ -24,7 +24,11 @@ const (
 
 // OpenPostgres abre um pool SQL para PostgreSQL com base na configuração.
 func OpenPostgres(cfg config.DBConfig) (*sql.DB, error) {
-	db, err := sql.Open("pgx", cfg.DSN())
+	return openPostgresDSN(cfg.DSN())
+}
+
+func openPostgresDSN(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao abrir conexão PostgreSQL: %w", err)
 	}
@@ -35,6 +39,20 @@ func OpenPostgres(cfg config.DBConfig) (*sql.DB, error) {
 	db.SetConnMaxIdleTime(connMaxIdleTime)
 
 	return db, nil
+}
+
+// OpenPostgresForImport abre o pool usado pelo `import logs`, com synchronous_commit=off.
+//
+// Medido na fase 4: ~90% do tempo do import era a espera do fsync de um commit por linha
+// (8.402 linhas: 34s com on, 3,5s com off). Com off, se o PostgreSQL cair, os commits dos
+// últimos ~0,6s podem se perder, sem corromper nada; como o import é idempotente
+// (spec 0004), basta reimportar. O serve continua com commit síncrono.
+func OpenPostgresForImport(cfg config.DBConfig) (*sql.DB, error) {
+	return openPostgresDSN(importDSN(cfg))
+}
+
+func importDSN(cfg config.DBConfig) string {
+	return cfg.DSN() + " synchronous_commit=off"
 }
 
 // Ping valida conectividade com timeout controlado.

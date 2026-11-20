@@ -23,7 +23,7 @@ var importLogsCmd = &cobra.Command{
 	Short: "Import log lines from one or more files",
 	Long:  "Read one or more log files line by line, normalize the maximum possible number of records, categorize them, and persist them as technical events.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		db, err := repository.OpenPostgres(appConfig.DB)
+		db, err := repository.OpenPostgresForImport(appConfig.DB)
 		if err != nil {
 			return fmt.Errorf("failed to open PostgreSQL connection: %w", err)
 		}
