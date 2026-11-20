@@ -69,16 +69,23 @@ func init() {
 }
 
 func printImportLogsSummary(cmd *cobra.Command, result *services.ImportLogFilesResult) {
-	cmd.Println("Log import summary")
-	cmd.Printf("Files processed: %d\n", result.FilesProcessed)
-	cmd.Printf("Lines read: %d\n", result.LinesRead)
-	cmd.Printf("Persisted: %d\n", result.Persisted)
-	cmd.Printf("Blank lines skipped: %d\n", result.BlankSkipped)
-	cmd.Printf("Normalized: %d\n", result.Normalized)
-	cmd.Printf("Partially interpreted: %d\n", result.Partial)
-	cmd.Printf("Uncategorizable: %d\n", result.Uncategorizable)
+	out := cmd.OutOrStdout()
+	_, _ = fmt.Fprintln(out, "Log import summary")
+	_, _ = fmt.Fprintf(out, "Files processed: %d\n", result.FilesProcessed)
+	_, _ = fmt.Fprintf(out, "Lines read: %d\n", result.LinesRead)
+	_, _ = fmt.Fprintf(out, "Persisted: %d\n", result.Persisted)
+	_, _ = fmt.Fprintf(out, "Blank lines skipped: %d\n", result.BlankSkipped)
+	_, _ = fmt.Fprintf(out, "Normalized: %d\n", result.Normalized)
+	_, _ = fmt.Fprintf(out, "Partially interpreted: %d\n", result.Partial)
+	_, _ = fmt.Fprintf(out, "Uncategorizable: %d\n", result.Uncategorizable)
 
 	if result.PersistenceError > 0 {
-		cmd.Printf("Persistence errors: %d\n", result.PersistenceError)
+		_, _ = fmt.Fprintf(out, "Persistence errors: %d\n", result.PersistenceError)
+		for _, lineErr := range result.Errors {
+			_, _ = fmt.Fprintf(out, "  %s:%d: %s\n", lineErr.File, lineErr.Line, lineErr.Reason)
+		}
+		if hidden := result.PersistenceError - len(result.Errors); hidden > 0 {
+			_, _ = fmt.Fprintf(out, "  ... and %d more\n", hidden)
+		}
 	}
 }

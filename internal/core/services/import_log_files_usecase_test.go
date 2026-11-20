@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -140,5 +141,33 @@ func TestImportLogFilesUseCaseSkipsBlankLines(t *testing.T) {
 	}
 	if repo.saves != 2 {
 		t.Fatalf("repo.Save calls = %d, want 2 (blank lines are not stored)", repo.saves)
+	}
+}
+
+func TestImportLogFilesUseCaseReportsFailedLines(t *testing.T) {
+	repo := &stubTechnicalEventRepository{err: errors.New("connection refused")}
+	registerUC := NewRegisterTechnicalEventUseCase(repo, &stubSystemSetupRepository{saved: basicSetupFixture()})
+	importUC := NewImportLogFilesUseCase(registerUC)
+	importUC.openFile = func(string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(strings.Repeat("some line\n", 12))), nil
+	}
+
+	result, err := importUC.Execute(context.Background(), ImportLogFilesInput{Files: []string{"app.log"}})
+	if err != nil {
+		t.Fatalf("Execute() unexpected error = %v", err)
+	}
+
+	if result.PersistenceError != 12 {
+		t.Fatalf("PersistenceError = %d, want 12", result.PersistenceError)
+	}
+	if len(result.Errors) != maxReportedImportErrors {
+		t.Fatalf("len(Errors) = %d, want %d", len(result.Errors), maxReportedImportErrors)
+	}
+	first := result.Errors[0]
+	if first.File != "app.log" || first.Line != 1 || !strings.Contains(first.Reason, "connection refused") {
+		t.Fatalf("Errors[0] = %+v, want app.log line 1 with the repository error", first)
+	}
+	if result.Errors[9].Line != 10 {
+		t.Fatalf("Errors[9].Line = %d, want 10", result.Errors[9].Line)
 	}
 }

@@ -17,6 +17,17 @@ import (
 
 const maxImportedLogLineSize = 1024 * 1024
 
+// maxReportedImportErrors caps how many failed lines are listed in the result; the
+// total is always in PersistenceError (spec 0004, seção 4.3).
+const maxReportedImportErrors = 10
+
+// ImportLineError identifies a line that could not be stored.
+type ImportLineError struct {
+	File   string
+	Line   int
+	Reason string
+}
+
 // ImportLogFilesInput defines the CLI input for file-based ingestion.
 type ImportLogFilesInput struct {
 	Files         []string
@@ -31,6 +42,8 @@ type ImportLogFilesResult struct {
 	LinesRead        int
 	Persisted        int
 	PersistenceError int
+	// Errors lists up to maxReportedImportErrors failed lines, in reading order.
+	Errors []ImportLineError
 	// BlankSkipped counts empty or whitespace-only lines, which are not stored.
 	BlankSkipped    int
 	Normalized      int
@@ -135,6 +148,9 @@ func (uc *ImportLogFilesUseCase) importFile(ctx context.Context, reader io.Reade
 		})
 		if err != nil {
 			result.PersistenceError++
+			if len(result.Errors) < maxReportedImportErrors {
+				result.Errors = append(result.Errors, ImportLineError{File: path, Line: lineNumber, Reason: err.Error()})
+			}
 			continue
 		}
 
