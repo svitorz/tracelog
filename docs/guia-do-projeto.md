@@ -175,7 +175,7 @@ Migrations atuais:
 
 | Arquivo | Conteúdo |
 |---------|----------|
-| `000001_initial_schema.sql` | Tabelas `environment`, `monitored_application`, `event_source`, `technical_event`, FKs e índices. |
+| `000001_initial_schema.sql` | Tabelas `environment`, `monitored_application`, `event_source`, `technical_event`, FKs e índices. Também cria a extensão `pgcrypto`, que nenhum código usa (o `gen_random_uuid()` é nativo desde o PostgreSQL 13); ela foi mantida de propósito, por ser inofensiva e não exigir superusuário (spec 0003, seção 9). |
 | `000002_add_log_import_fields.sql` | Colunas `raw_line`, `normalization_status`, `parse_error` em `technical_event` e índice. |
 | `000003_external_id_per_application.sql` | Troca o `UNIQUE (external_id)` global por índice único parcial em `(application_id, external_id)` onde `external_id` não é nulo. |
 

@@ -4,7 +4,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 
 ## Fase atual
 
-**Fase 3 (container e migrations) concluída** no branch `feat/container`, criado a partir de `fix/http-hardening` (que está no GitHub, sem PR nem merge). Aguardando "continuar" para a Fase 4 e a decisão pendente 6.
+**Fase 3 (container e migrations) concluída** no branch `feat/container`, criado a partir de `fix/http-hardening` (que está no GitHub, sem PR nem merge). Aguardando "continuar" para a Fase 4.
 
 ## Checklist
 
@@ -26,7 +26,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 3. ~~**Arquivos não commitados.**~~ Decidido: commitados na Fase 1, um commit por arquivo lógico.
 4. ~~**Makefile.**~~ Decidido: criar na Fase 3 (ver log de decisões).
 5. ~~**Versão do Go.**~~ Decidido: 1.26.11 (ver log de decisões).
-6. **`pgcrypto` (H13).** Não removido: `000001` (já commitada, não pode ser editada) cria a extensão em todo banco novo; tirá-la exigiria `DROP EXTENSION IF EXISTS pgcrypto` numa `000004`, ou seja, criar e apagar em toda instalação, e é mudança destrutiva de schema (AGENTS.md pede confirmação). Desde o PostgreSQL 13 a `pgcrypto` é extensão *trusted*, então não exige superusuário. Recomendação: deixar e documentar como inofensiva. Na pergunta da fase 3 eu tinha dito que a removeria; revi ao implementar.
+6. ~~**`pgcrypto` (H13).**~~ Decidido: deixar e documentar (spec 0003 §9, guia §4.4). Contexto: não removido porque `000001` (já commitada, não pode ser editada) cria a extensão em todo banco novo; tirá-la exigiria `DROP EXTENSION IF EXISTS pgcrypto` numa `000004`, ou seja, criar e apagar em toda instalação, e é mudança destrutiva de schema (AGENTS.md pede confirmação). Desde o PostgreSQL 13 a `pgcrypto` é extensão *trusted*, então não exige superusuário. Recomendação: deixar e documentar como inofensiva. Na pergunta da fase 3 eu tinha dito que a removeria; revi ao implementar.
 
 ## Log de decisões
 
@@ -189,4 +189,4 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 
 ## Próximo passo
 
-Decidir o `pgcrypto` (pendente 6). Abrir PR de `fix/http-hardening` (e depois de `feat/container`) para o CI rodar. "continuar" inicia a Fase 4 (`feat/sample-data`): dataset em `examples/logs/` (atenção ao `*.log` do `.gitignore`), gerador determinístico, decisão sobre `seed`, relatório de erros do import e `scripts/demo.sh` + alvo `make demo`.
+Abrir PR de `fix/http-hardening` (e depois de `feat/container`) para o CI rodar. "continuar" inicia a Fase 4 (`feat/sample-data`): dataset em `examples/logs/` (atenção ao `*.log` do `.gitignore`), gerador determinístico, decisão sobre `seed`, relatório de erros do import e `scripts/demo.sh` + alvo `make demo`.

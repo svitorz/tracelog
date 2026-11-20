@@ -90,4 +90,8 @@ Nova tabela `schema_migrations`, criada pelo `tracelog migrate`, fora dos arquiv
 
 ## 8. Questões em aberto
 
-- `CREATE EXTENSION pgcrypto` em `000001` é desnecessário no PostgreSQL 16, mas a migration já commitada não pode ser editada. Removê-lo exigiria `DROP EXTENSION` numa migration nova. Fica como está até decisão do autor (ver relatório da fase 3).
+Nenhuma.
+
+## 9. Decisões registradas
+
+- **`pgcrypto` fica** (decisão do autor, 2026-11-20). `CREATE EXTENSION IF NOT EXISTS pgcrypto` em `000001` é desnecessário no PostgreSQL 16 (`gen_random_uuid()` é nativo desde o 13), mas a migration já commitada não pode ser editada, e removê-la exigiria `DROP EXTENSION` numa migration nova, criando e apagando a extensão em toda instalação. Desde o PostgreSQL 13 a `pgcrypto` é extensão *trusted*: quem tem `CREATE` no banco consegue instalá-la sem superusuário. Nenhum código depende dela.
