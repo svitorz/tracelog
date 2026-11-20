@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"svitorz/tracelog/internal/core/domain"
 	"svitorz/tracelog/internal/core/ports"
@@ -435,22 +436,61 @@ func deriveSeverity(message string, category domain.EventCategory, payload map[s
 		}
 	}
 
-	if containsAny(content, "panic", "fatal", "unrecoverable", "crash") || payloadHasSignal(payload, "panic", "fatal", "stack_trace") {
+	words := messageWords(content)
+
+	if hasAnyWord(words, fatalWords...) || payloadHasSignal(payload, "panic", "fatal", "stack_trace") {
 		return domain.SeverityFatal
 	}
 
-	if containsAny(content, "error", "failed", "failure", "timeout", "exception", "unauthorized", "denied") ||
+	if hasAnyWord(words, errorWords...) || camelCaseErrorType.MatchString(message) ||
 		payloadHasSignal(payload, "error", "errors", "exception", "exception_message") {
 		return domain.SeverityError
 	}
 
 	if category == domain.CategorySecurity ||
-		containsAny(content, "warn", "warning", "retry", "deprecated", "slow", "fallback") ||
+		hasAnyWord(words, warnWords...) ||
 		payloadHasSignal(payload, "warning", "warnings", "retry_count") {
 		return domain.SeverityWarn
 	}
 
 	return domain.SeverityInfo
+}
+
+// Keywords matched as whole words (spec 0002, seção 4.4). The inflections keep what the
+// old substring search caught on purpose ("crashed", "timeouts") without matching
+// unrelated words that merely contain a keyword ("terror", "crashpad").
+var (
+	fatalWords = []string{"panic", "panics", "panicked", "panicking", "fatal", "fatally", "unrecoverable", "crash", "crashes", "crashed", "crashing"}
+	errorWords = []string{"error", "errors", "failed", "failure", "failures", "timeout", "timeouts", "exception", "exceptions", "unauthorized", "denied"}
+	warnWords  = []string{"warn", "warns", "warned", "warning", "warnings", "retry", "retrying", "deprecated", "slow", "slowly", "slower", "fallback", "fallbacks"}
+)
+
+// camelCaseErrorType matches type names such as TypeError or IOException. It is
+// case-sensitive so that "terror" does not match.
+var camelCaseErrorType = regexp.MustCompile(`\b[A-Z][A-Za-z0-9]*(Error|Exception)\b`)
+
+// messageWords splits a lowercased message into words (runs of letters and digits).
+func messageWords(content string) map[string]struct{} {
+	fields := strings.FieldsFunc(content, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+
+	words := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		words[field] = struct{}{}
+	}
+
+	return words
+}
+
+func hasAnyWord(words map[string]struct{}, needles ...string) bool {
+	for _, needle := range needles {
+		if _, ok := words[needle]; ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func extractSeverityFromPayload(payload map[string]any) (domain.Severity, bool) {
