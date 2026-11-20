@@ -1,6 +1,6 @@
 # Spec 0001: Ingestão em lote e idempotente
 
-- **Status:** Aprovada (decisões confirmadas pelo autor; ver seção 10)
+- **Status:** Aprovada (decisões confirmadas pelo autor; ver seção 10). **Implementação parcial na v0.1.0:** só D1, D2 (exceto a linha de `external_id` ausente), D8 e D9, via [spec 0002](./0002-endurecimento-da-api-http.md). D3 (lote), D5 (`external_id` obrigatório) e o limite de lote de D6 ficam para depois da v0.1.0; até lá, evento sem `external_id` continua aceito (`201`) e não é deduplicado.
 - **Autor:** Vitor Fábio
 - **Data:** 2026-10-15
 - **Escopo:** interface HTTP de ingestão e schema de `technical_event`
