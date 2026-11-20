@@ -538,7 +538,7 @@ Dependências diretas (`go.mod`): `github.com/jackc/pgx/v5` e `github.com/spf13/
 5. **Heurística de severidade** não entende negação (seção 7.3).
 6. **`seed` não popula nada.**
 7. **`--help` exige `.env` válido.**
-8. O CI (`.github/workflows/ci.yml`) roda gofmt, `go vet`, `go test -race` com PostgreSQL e build; ele ainda não constrói a imagem Docker.
+8. O CI (`.github/workflows/ci.yml`) roda gofmt, `go vet`, `go test -race` com PostgreSQL e build, além de um job que constrói a imagem Docker e confere que ela não roda como root.
 
 ---
 
