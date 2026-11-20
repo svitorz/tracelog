@@ -49,14 +49,16 @@ The CLI and HTTP server read configuration from `.env` at the project root.
 Apply the SQL schema:
 
 ```bash
-./scripts/run-migrations.sh
+go run . migrate
 ```
 
-What this script does today:
+What this command does:
 
-- loads `.env`
-- starts the `postgres` container if necessary
-- executes every SQL file in `migrations/` against the configured database
+- reads the database settings from `.env`
+- applies, in order, the migrations embedded in the binary that are not yet recorded in `schema_migrations`
+- does nothing when the database is already up to date
+
+PostgreSQL must already be running (step 1).
 
 If migrations do not run successfully, do not continue to `init` or `serve`.
 

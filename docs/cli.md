@@ -486,7 +486,7 @@ Populates the database with default entities required for basic operation. This 
 
 ```bash
 # First-time database setup
-./scripts/run-migrations.sh
+tracelog migrate
 tracelog seed
 
 # Re-seed after database changes (safe)
@@ -528,7 +528,7 @@ tracelog db list sources
 docker compose up -d
 
 # 2. Run migrations
-./scripts/run-migrations.sh
+tracelog migrate
 
 # 3. Seed reference data
 tracelog seed

@@ -13,14 +13,17 @@ Roadmap em ordem: (1) fundação OSS, (2) núcleo de investigação (pipe, busca
 
 ## 2. Stack e comandos
 
-- Go **1.24.4** (`go.mod`), módulo `svitorz/tracelog`.
+- Go **1.26.11** (`go.mod`), módulo `svitorz/tracelog`.
 - Dependências diretas: `github.com/jackc/pgx/v5` (driver via `database/sql`), `github.com/spf13/cobra`.
 - PostgreSQL 16 via `docker-compose.yml`.
 
 ```bash
 cp .env.example .env                    # primeira vez
-docker compose up -d postgres           # banco
-./scripts/run-migrations.sh             # aplica migrations/*.sql
+docker compose up -d                    # banco + migrate + init --defaults + API
+
+# ou, com a CLI no host:
+docker compose up -d postgres           # só o banco
+go run . migrate                        # aplica migrations pendentes
 go run . init                           # setup obrigatório antes do serve
 go run . serve                          # servidor HTTP
 
@@ -61,10 +64,10 @@ A camada de repositório hoje é específica de PostgreSQL (`JSONB`, `gen_random
 
 ## 5. Migrations
 
-- Arquivos em `migrations/`, nomeados `NNNNNN_descricao.sql`, executados **em ordem a cada execução** de `scripts/run-migrations.sh`. Não há tabela de controle de versão.
-- Por isso **toda migration deve ser idempotente**: `CREATE ... IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `DROP ... IF EXISTS`.
+- Arquivos em `migrations/`, nomeados `NNNNNN_descricao.sql`, embutidos no binário e aplicados em ordem por `tracelog migrate`, que registra cada versão em `schema_migrations` (spec 0003).
+- **Toda migration continua tendo que ser idempotente** (`CREATE ... IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `DROP ... IF EXISTS`): se o processo morrer entre aplicar e registrar, o arquivo roda de novo, e bancos migrados pelo antigo script são adotados reaplicando tudo.
+- Cada arquivo controla a própria transação (`BEGIN`/`COMMIT`).
 - Nunca edite uma migration já commitada. Crie uma nova.
-- Se a tarefa exigir controle de versão de migrations, isso é uma mudança de arquitetura: escreva uma spec antes.
 
 ## 6. Configuração
 

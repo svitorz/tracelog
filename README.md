@@ -53,10 +53,10 @@ Review the database and HTTP settings in `.env` before continuing.
 ### 4. Run migrations
 
 ```bash
-./scripts/run-migrations.sh
+go run . migrate
 ```
 
-This script applies the SQL files in `migrations/` and starts the `postgres` container if needed.
+This applies the SQL migrations embedded in the binary that are not yet recorded in the `schema_migrations` table. PostgreSQL must already be running (step 2). Running it again is safe.
 
 ### 5. Initialize the local MVP
 

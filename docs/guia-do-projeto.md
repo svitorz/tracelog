@@ -108,14 +108,37 @@ DB_SSLMODE=disable
 
 > **Atenção:** sem `DB_NAME`, `DB_USER` e `DB_PASSWORD`, **qualquer** comando do binário falha antes de executar, inclusive `--help`.
 
-### 4.3 Subir o PostgreSQL
+### 4.3 Subir com Docker Compose
+
+Caminho mais curto: tudo em container.
+
+```bash
+docker compose up -d     # ou: make up
+docker compose ps -a
+```
+
+O `docker-compose.yml` (spec 0003) tem quatro serviços:
+
+| Serviço | Faz | Começa quando |
+|---------|-----|---------------|
+| `postgres` | `postgres:16.16-alpine`, volume `tracelog_postgres_data`, healthcheck `pg_isready` | — |
+| `migrate` | `tracelog migrate` e termina | `postgres` saudável |
+| `init` | `tracelog init --defaults` e termina | `migrate` terminou com código 0 |
+| `api` | `tracelog serve`, healthcheck em `/ready` | `init` terminou com código 0 |
+
+`migrate` e `init` aparecem como `exited (0)` no `ps -a`: é o esperado. Rodar `docker compose up` de novo não reaplica migrations nem muda IDs.
+
+- Dentro da rede do compose a aplicação usa `DB_HOST=postgres` e `DB_PORT=5432`. O `DB_HOST`/`DB_PORT` do `.env` só valem para a CLI no host.
+- PostgreSQL e API são publicados **só em `127.0.0.1`**, nas portas `DB_PORT` e `HTTP_PORT` do `.env`. Se a 5432 já estiver ocupada por outro PostgreSQL, troque `DB_PORT` no `.env`.
+- A imagem `tracelog:local` é construída do `Dockerfile` (multi-stage, `alpine:3.24`, processo com UID 10001, sem root).
+
+Só o banco, para usar a CLI no host:
 
 ```bash
 docker compose up -d postgres
-docker compose ps
 ```
 
-O serviço (`docker-compose.yml`) usa `postgres:16-alpine`, container `tracelog-postgres`, volume `tracelog_postgres_data` e healthcheck com `pg_isready`.
+**O que não é seguro neste setup:** a API não tem autenticação (quem alcança a porta grava eventos), não há TLS (nem cliente→API nem API→banco), a senha padrão do banco é `postgres` e não há rate limit. Publicar só em `127.0.0.1` reduz a exposição, mas não resolve nada disso. É um setup de uso local.
 
 Para zerar o banco (apaga os dados):
 
@@ -126,15 +149,27 @@ docker compose down -v
 ### 4.4 Aplicar as migrations
 
 ```bash
-./scripts/run-migrations.sh
+go run . migrate        # ou: make migrate
 ```
 
-O script:
+O comando (spec 0003):
 
-1. cria o `.env` a partir do `.env.example` se ele não existir;
-2. carrega o `.env`;
-3. sobe o serviço `postgres`, se necessário;
-4. executa **todos** os `migrations/*.sql` em ordem alfabética, com `psql -v ON_ERROR_STOP=1`.
+1. usa o banco configurado no `.env`/ambiente (o PostgreSQL precisa estar no ar);
+2. cria a tabela `schema_migrations` se ela não existir;
+3. aplica, em ordem, os `migrations/*.sql` **embutidos no binário** que ainda não estão registrados, um por vez, registrando cada um logo depois;
+4. usa um *advisory lock* para que duas execuções simultâneas não apliquem a mesma migration.
+
+Saída real numa base vazia e numa segunda execução:
+
+```text
+[migrate] applied 000001_initial_schema
+[migrate] applied 000002_add_log_import_fields
+[migrate] applied 000003_external_id_per_application
+[migrate] database is up to date (3 migrations)
+[migrate] database is up to date (3 migrations)
+```
+
+O antigo `scripts/run-migrations.sh` foi removido. Um banco migrado por ele (sem `schema_migrations`) é adotado: tudo roda de novo, sem erro porque os arquivos são idempotentes, e passa a ser registrado.
 
 Migrations atuais:
 
@@ -144,7 +179,7 @@ Migrations atuais:
 | `000002_add_log_import_fields.sql` | Colunas `raw_line`, `normalization_status`, `parse_error` em `technical_event` e índice. |
 | `000003_external_id_per_application.sql` | Troca o `UNIQUE (external_id)` global por índice único parcial em `(application_id, external_id)` onde `external_id` não é nulo. |
 
-> **Importante:** não há controle de versão. Cada execução reaplica todos os arquivos. Por isso cada migration usa `IF NOT EXISTS`. Qualquer migration nova precisa seguir o mesmo padrão idempotente, ou o script precisa ser evoluído para registrar o que já foi aplicado.
+> **Importante:** toda migration nova continua tendo que ser idempotente (`IF NOT EXISTS`): se o processo morrer entre aplicar um arquivo e registrá-lo, ele roda de novo na próxima vez.
 
 ### 4.5 Setup inicial (obrigatório antes do `serve`)
 
@@ -152,7 +187,7 @@ Migrations atuais:
 go run . init
 ```
 
-É interativo. Pressione Enter para aceitar os padrões:
+É interativo: pressione Enter para aceitar os padrões. Para não perguntar nada (containers, scripts), use `go run . init --defaults`, que grava os mesmos padrões sem ler a entrada; é isso que o serviço `init` do compose roda.
 
 | Pergunta | Padrão |
 |----------|--------|
@@ -202,7 +237,7 @@ go vet ./...
 go test ./...
 ```
 
-Não há `Makefile` no projeto. Os comandos acima são o equivalente.
+O `Makefile` tem atalhos: `make lint` (gofmt + vet), `make test` (com `-race`), `make build`, `make up` e `make migrate`.
 
 ### 5.4 Subir o servidor
 
@@ -471,8 +506,7 @@ tracelog/
 │   └── adapters/
 │       ├── http/                 # server.go, event_handler.go, dto.go
 │       └── repository/           # PostgreSQL (pgx/v5 via database/sql)
-├── migrations/                   # SQL aplicado por scripts/run-migrations.sh
-├── scripts/run-migrations.sh
+├── migrations/                   # SQL + embed.go, aplicados por `tracelog migrate`
 ├── docker-compose.yml            # serviço postgres:16-alpine
 ├── .env.example
 └── docs/                         # documentação
@@ -497,14 +531,14 @@ Dependências diretas (`go.mod`): `github.com/jackc/pgx/v5` e `github.com/spf13/
 
 ## 11. Limitações conhecidas
 
-1. **Migrations sem controle de versão** (seção 4.4).
+1. **Migrations sem *down*:** correção de schema é sempre uma migration nova.
 2. **Truncagem de `external_id`**: dois valores longos com os mesmos 255 primeiros caracteres viram o mesmo evento (risco aceito na spec 0002).
 3. **Sem validação de `message`** no HTTP: qualquer valor é aceito e normalizado.
 4. **Sem autenticação, rate limiting ou versionamento** de API (`/v1`). Documentado como futuro.
 5. **Heurística de severidade** não entende negação (seção 7.3).
 6. **`seed` não popula nada.**
 7. **`--help` exige `.env` válido.**
-8. Não há Makefile (previsto para a fase 3). O CI está em `.github/workflows/ci.yml`: gofmt, `go vet`, `go test -race` com PostgreSQL e build.
+8. O CI (`.github/workflows/ci.yml`) roda gofmt, `go vet`, `go test -race` com PostgreSQL e build; ele ainda não constrói a imagem Docker.
 
 ---
 

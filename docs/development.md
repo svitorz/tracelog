@@ -71,16 +71,13 @@ docker compose logs postgres
 
 ### 4. Run Database Migrations
 
-Execute the migration script to create tables and seed initial data:
+Apply the migrations embedded in the binary (PostgreSQL must be running):
 
 ```bash
-./scripts/run-migrations.sh
+go run . migrate
 ```
 
-This script:
-1. Starts PostgreSQL (if not running)
-2. Applies all SQL files from `migrations/` directory in order
-3. Creates tables and inserts bootstrap data (environments, applications, sources)
+Each file in `migrations/` runs once and is recorded in `schema_migrations`. Migrations create tables only; reference data comes from `go run . init`.
 
 **Verify migrations**:
 
@@ -188,14 +185,11 @@ go tool cover -html=coverage.out
 
 ### Integration Tests
 
-Currently, integration tests require a running PostgreSQL instance. Set up test database:
+The repository integration tests run only when `TRACELOG_TEST_DATABASE_URL` is set; otherwise they are skipped. Each test creates and drops its own schema, so existing tables are not touched:
 
 ```bash
-# Create test database
-docker compose exec postgres psql -U postgres -c "CREATE DATABASE tracelog_test;"
-
-# Run migrations on test database
-DB_NAME=tracelog_test ./scripts/run-migrations.sh
+TRACELOG_TEST_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/tracelog?sslmode=disable' \
+  go test ./internal/adapters/repository/
 ```
 
 ---
@@ -248,7 +242,6 @@ tracelog/
 │   └── 000002_bootstrap_data.sql
 │
 ├── scripts/                      # Utility scripts
-│   ├── run-migrations.sh         # Apply database migrations
 │   ├── setup-demo-data.sh        # Populate demo data
 │   └── seed-error-data.sh        # Generate sample error events
 │
@@ -470,10 +463,8 @@ GROUP BY ma.name;
 # Stop and remove container
 docker compose down -v
 
-# Restart and re-run migrations
+# Recreate everything (postgres, migrations, setup, API)
 docker compose up -d
-./scripts/run-migrations.sh
-go run . seed
 ```
 
 ### Manual Migrations
@@ -493,10 +484,10 @@ ALTER TABLE technical_event ADD COLUMN tags TEXT[];
 CREATE INDEX idx_technical_event_tags ON technical_event USING GIN(tags);
 ```
 
-Run migrations:
+Run migrations (only files not yet in `schema_migrations` are applied):
 
 ```bash
-./scripts/run-migrations.sh
+go run . migrate
 ```
 
 ---
@@ -616,9 +607,8 @@ Error: relation "technical_event" already exists
 **Solution**: Reset database or manually fix schema:
 
 ```bash
-docker compose down -v
-docker compose up -d
-./scripts/run-migrations.sh
+docker compose down -v   # deletes the database volume
+docker compose up -d     # recreates schema and setup
 ```
 
 ---
