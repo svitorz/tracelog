@@ -21,7 +21,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 
 ## Decisões pendentes (bloqueiam a Fase 1 ou a 2)
 
-1. **Licença.** O working tree (não commitado) já tem `LICENSE` GPL-3.0, README alterado para GPL-3.0 e `AGENTS.md` dizendo GPL-3.0. O prompt da tarefa pede MIT. Qual vale?
+1. ~~**Licença.**~~ Decidido: GPL-3.0 (ver log de decisões).
 2. **Spec 0001 x prompt.** `docs/specs/0001-ingestao-em-lote-idempotente.md` (não commitada, marcada "Aprovada") já decide H4: unicidade `(application_id, external_id)`, duplicata responde `200` com `"duplicate": true`, `external_id` obrigatório no HTTP (400) e cria `POST /events/batch`. Isso conflita com "decida comigo 409 ou devolver existente", com H5 ("não perder evento": sem `external_id` decodificável a requisição viraria 400) e com o escopo enxuto da Fase 2.
 3. **Arquivos não commitados** (`AGENTS.md`, `LICENSE`, `docs/guia-do-projeto.md`, `docs/specs/`, mudança no `README.md`): commitar na Fase 1 depois da decisão da licença?
 
@@ -29,6 +29,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 
 | Data | Decisão | Porquê |
 |------|---------|--------|
+| 2026-11-20 | Licença GPL-3.0, não MIT. Na Fase 1, o item "adicionar LICENSE MIT" vira "commitar o `LICENSE` GPL-3.0 e o README já ajustados" | Decisão do autor; o working tree e o `AGENTS.md` já estavam em GPL-3.0 |
 | 2026-11-20 | Verificação da Fase 0 feita com Postgres descartável próprio (`tracelog-phase0-pg`, 127.0.0.1:55432), removido ao final | Confirmar hipóteses executando sem tocar no banco do usuário; a 5432 local está ocupada por outro projeto (`ecommerce-db-1`) |
 
 ## Medições (Fase 0)
@@ -92,4 +93,4 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 
 ## Próximo passo
 
-Responder às 3 decisões pendentes e escrever "continuar" para iniciar a Fase 1.
+Responder às decisões pendentes 2 (spec 0001) e 3 (commit dos arquivos não versionados) e escrever "continuar" para iniciar a Fase 1.
