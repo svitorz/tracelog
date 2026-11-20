@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -127,4 +129,76 @@ func waitUntilRefused(t *testing.T, addr string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("listener at %s still accepting connections after shutdown started", addr)
+}
+
+func TestHealthAndReadiness(t *testing.T) {
+	dbDown := func(context.Context) error { return errors.New("dial tcp 127.0.0.1:5432: connection refused") }
+	dbUp := func(context.Context) error { return nil }
+
+	tests := []struct {
+		name       string
+		ready      ReadinessCheck
+		method     string
+		path       string
+		wantStatus int
+	}{
+		{"health ignores the database", dbDown, http.MethodGet, "/health", http.StatusOK},
+		{"health accepts HEAD", dbDown, http.MethodHead, "/health", http.StatusOK},
+		{"health rejects DELETE", dbUp, http.MethodDelete, "/health", http.StatusMethodNotAllowed},
+		{"ready with database up", dbUp, http.MethodGet, "/ready", http.StatusOK},
+		{"ready with database down", dbDown, http.MethodGet, "/ready", http.StatusServiceUnavailable},
+		{"ready without a check", nil, http.MethodGet, "/ready", http.StatusServiceUnavailable},
+		{"ready rejects POST", dbUp, http.MethodPost, "/ready", http.StatusMethodNotAllowed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewServer(ServerConfig{MaxBodyBytes: 1024, Ready: tt.ready, Logger: discardLogger()}, nil)
+			rec := httptest.NewRecorder()
+			s.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest(tt.method, tt.path, nil))
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("%s %s = %d, want %d", tt.method, tt.path, rec.Code, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func TestReadyHidesDatabaseErrorFromResponse(t *testing.T) {
+	s := NewServer(ServerConfig{
+		MaxBodyBytes: 1024,
+		Logger:       discardLogger(),
+		Ready:        func(context.Context) error { return errors.New("password authentication failed") },
+	}, nil)
+
+	rec := httptest.NewRecorder()
+	s.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ready", nil))
+
+	if body := rec.Body.String(); body != "{\"status\":\"unavailable\"}\n" {
+		t.Fatalf("body = %q, want only the generic status", body)
+	}
+}
+
+func TestReadyAppliesTimeout(t *testing.T) {
+	s := NewServer(ServerConfig{
+		MaxBodyBytes: 1024,
+		Logger:       discardLogger(),
+		Ready: func(ctx context.Context) error {
+			if _, ok := ctx.Deadline(); !ok {
+				return errors.New("no deadline")
+			}
+			return nil
+		},
+	}, nil)
+
+	rec := httptest.NewRecorder()
+	s.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ready", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: readiness check must receive a context with deadline", rec.Code)
+	}
+}
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }

@@ -34,12 +34,8 @@ func NewEventHandler(registerUseCase *services.RegisterTechnicalEventUseCase, ma
 	}
 }
 
+// HandleRegisterEvent serves POST /events; the method is checked by the router.
 func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	if contentType := r.Header.Get("Content-Type"); contentType != "" && !isJSONMediaType(contentType) {
 		respondError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
 		return

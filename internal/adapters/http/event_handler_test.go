@@ -168,6 +168,9 @@ func TestRegisterEventRejectsWrongMethod(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", rec.Code)
 	}
+	if got := rec.Header().Get("Allow"); got != http.MethodPost {
+		t.Fatalf("Allow = %q, want %q", got, http.MethodPost)
+	}
 }
 
 func TestRegisterEventRejectsBodyOverLimit(t *testing.T) {

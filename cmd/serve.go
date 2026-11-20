@@ -61,6 +61,9 @@ var serveCmd = &cobra.Command{
 		server := httpadapter.NewServer(httpadapter.ServerConfig{
 			Addr:         fmt.Sprintf(":%d", port),
 			MaxBodyBytes: appConfig.HTTP.MaxBodyBytes,
+			Ready: func(ctx context.Context) error {
+				return repository.Ping(ctx, db)
+			},
 		}, registerUseCase)
 
 		ln, err := net.Listen("tcp", server.Addr())

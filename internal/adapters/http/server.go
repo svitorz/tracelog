@@ -2,12 +2,13 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"svitorz/tracelog/internal/core/services"
@@ -20,7 +21,11 @@ const (
 	writeTimeout      = 15 * time.Second
 	idleTimeout       = 60 * time.Second
 	shutdownTimeout   = 8 * time.Second
+	readinessTimeout  = 2 * time.Second
 )
+
+// ReadinessCheck reports whether the server's dependencies (the database) can serve requests.
+type ReadinessCheck func(ctx context.Context) error
 
 // ServerConfig groups the settings the HTTP adapter needs.
 type ServerConfig struct {
@@ -28,6 +33,8 @@ type ServerConfig struct {
 	MaxBodyBytes int64
 	// Logger receives internal error details. Nil means slog.Default().
 	Logger *slog.Logger
+	// Ready backs GET /ready. Nil makes /ready always report unavailable.
+	Ready ReadinessCheck
 }
 
 // Server is the main HTTP server for the MVP.
@@ -45,8 +52,9 @@ func NewServer(cfg ServerConfig, registerUseCase *services.RegisterTechnicalEven
 	mux := http.NewServeMux()
 	eventHandler := NewEventHandler(registerUseCase, cfg.MaxBodyBytes, logger)
 
-	mux.HandleFunc("/health", handleHealth)
-	mux.HandleFunc("/events", eventHandler.HandleRegisterEvent)
+	mux.HandleFunc("/health", allowMethods(handleHealth, http.MethodGet, http.MethodHead))
+	mux.HandleFunc("/ready", allowMethods(readyHandler(cfg.Ready, logger), http.MethodGet, http.MethodHead))
+	mux.HandleFunc("/events", allowMethods(eventHandler.HandleRegisterEvent, http.MethodPost))
 
 	return &Server{
 		httpServer: &http.Server{
@@ -94,7 +102,41 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	return nil
 }
 
+// handleHealth is the liveness probe: it answers while the process runs and never
+// touches the database, so a slow database does not get a healthy process restarted.
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// readyHandler is the readiness probe: it pings the database with a short timeout.
+func readyHandler(check ReadinessCheck, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		err := errors.New("readiness check not configured")
+		if check != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), readinessTimeout)
+			defer cancel()
+			err = check(ctx)
+		}
+
+		if err != nil {
+			logger.WarnContext(r.Context(), "readiness check failed", "error", err)
+			respondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
+			return
+		}
+
+		respondJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	}
+}
+
+// allowMethods answers 405 with an Allow header, keeping the JSON error format.
+func allowMethods(next http.HandlerFunc, methods ...string) http.HandlerFunc {
+	allowed := strings.Join(methods, ", ")
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !slices.Contains(methods, r.Method) {
+			w.Header().Set("Allow", allowed)
+			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		next(w, r)
+	}
 }
