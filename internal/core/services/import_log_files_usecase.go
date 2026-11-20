@@ -3,10 +3,13 @@ package services
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -42,6 +45,8 @@ type ImportLogFilesResult struct {
 	LinesRead        int
 	Persisted        int
 	PersistenceError int
+	// Duplicates counts lines already imported before (same derived external_id).
+	Duplicates int
 	// Errors lists up to maxReportedImportErrors failed lines, in reading order.
 	Errors []ImportLineError
 	// BlankSkipped counts empty or whitespace-only lines, which are not stored.
@@ -132,6 +137,7 @@ func (uc *ImportLogFilesUseCase) importFile(ctx context.Context, reader io.Reade
 		category, status := uc.categorizer.Categorize(parsed)
 
 		registered, err := uc.registerUC.Execute(ctx, RegisterTechnicalEventInput{
+			ExternalID:          importedLineExternalID(path, lineNumber, rawLine),
 			OccurredAt:          parsed.OccurredAt,
 			Message:             parsed.Message,
 			Category:            category,
@@ -154,6 +160,11 @@ func (uc *ImportLogFilesUseCase) importFile(ctx context.Context, reader io.Reade
 			continue
 		}
 
+		if registered.Duplicate {
+			result.Duplicates++
+			continue
+		}
+
 		result.Persisted++
 		switch registered.Event.NormalizationStatus {
 		case domain.NormalizationStatusNormalized:
@@ -170,6 +181,14 @@ func (uc *ImportLogFilesUseCase) importFile(ctx context.Context, reader io.Reade
 	}
 
 	return nil
+}
+
+// importedLineExternalID identifies a log line so that importing the same file again is
+// deduplicated (spec 0004, seção 4.1). It uses the base name, not the path, so the same
+// file imported from the host or from a container mount gets the same IDs.
+func importedLineExternalID(path string, lineNumber int, rawLine string) string {
+	sum := sha256.Sum256([]byte(filepath.Base(path) + "\x00" + strconv.Itoa(lineNumber) + "\x00" + rawLine))
+	return "file:" + hex.EncodeToString(sum[:])[:32]
 }
 
 func normalizeImportFileList(files []string) []string {

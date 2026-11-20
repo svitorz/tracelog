@@ -74,6 +74,7 @@ func printImportLogsSummary(cmd *cobra.Command, result *services.ImportLogFilesR
 	_, _ = fmt.Fprintf(out, "Files processed: %d\n", result.FilesProcessed)
 	_, _ = fmt.Fprintf(out, "Lines read: %d\n", result.LinesRead)
 	_, _ = fmt.Fprintf(out, "Persisted: %d\n", result.Persisted)
+	_, _ = fmt.Fprintf(out, "Duplicates (already imported): %d\n", result.Duplicates)
 	_, _ = fmt.Fprintf(out, "Blank lines skipped: %d\n", result.BlankSkipped)
 	_, _ = fmt.Fprintf(out, "Normalized: %d\n", result.Normalized)
 	_, _ = fmt.Fprintf(out, "Partially interpreted: %d\n", result.Partial)
