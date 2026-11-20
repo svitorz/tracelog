@@ -65,6 +65,8 @@ func newIntegrationFixture(t *testing.T) integrationFixture {
 	}
 	query := parsed.Query()
 	query.Set("search_path", schema)
+	// Fuso diferente de UTC, para provar que a agregação por dia não depende da sessão.
+	query.Set("timezone", "America/Sao_Paulo")
 	parsed.RawQuery = query.Encode()
 
 	db, err := sql.Open("pgx", parsed.String())
@@ -230,4 +232,47 @@ func messages(events []domain.TechnicalEvent) []string {
 		out = append(out, e.Message)
 	}
 	return out
+}
+
+func TestIntegrationErrorFrequencyByDay(t *testing.T) {
+	f := newIntegrationFixture(t)
+	events := NewPostgresTechnicalEventRepository(f.db)
+	metrics := NewPostgresErrorFrequencyRepository(f.db)
+	ctx := context.Background()
+	at := func(day, hour int) time.Time { return time.Date(2026, 3, day, hour, 30, 0, 0, time.UTC) }
+
+	for _, e := range []*domain.TechnicalEvent{
+		f.event(f.appA, "", "e1", domain.SeverityError, at(1, 10)),
+		f.event(f.appA, "", "f1", domain.SeverityFatal, at(1, 11)),
+		f.event(f.appA, "", "i1", domain.SeverityInfo, at(1, 12)),
+		// 02:30 UTC do dia 2 = 23:30 do dia 1 em São Paulo: deve contar no dia 2.
+		f.event(f.appA, "", "e2", domain.SeverityError, at(2, 2)),
+		f.event(f.appB, "", "e-other-app", domain.SeverityError, at(2, 3)),
+		f.event(f.appA, "", "w3", domain.SeverityWarn, at(3, 10)),
+	} {
+		if _, err := events.Save(ctx, e); err != nil {
+			t.Fatalf("Save(%s) error = %v", e.Message, err)
+		}
+	}
+
+	got, err := metrics.GetErrorFrequencyByDay(ctx, ports.ErrorFrequencyFilters{ApplicationID: f.appA})
+	if err != nil {
+		t.Fatalf("GetErrorFrequencyByDay() error = %v", err)
+	}
+
+	want := []struct {
+		date          string
+		errors, fatal int64
+	}{
+		{"2026-03-01", 1, 1},
+		{"2026-03-02", 1, 0},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("GetErrorFrequencyByDay() = %+v, want %d days (day 3 has only warn)", got, len(want))
+	}
+	for i, w := range want {
+		if d := got[i].Date.Format("2006-01-02"); d != w.date || got[i].Errors != w.errors || got[i].Fatal != w.fatal {
+			t.Errorf("day %d = %s errors=%d fatal=%d, want %s errors=%d fatal=%d", i, d, got[i].Errors, got[i].Fatal, w.date, w.errors, w.fatal)
+		}
+	}
 }
