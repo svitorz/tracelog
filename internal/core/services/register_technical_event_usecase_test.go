@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
+	"unicode/utf8"
 	"time"
 
 	"svitorz/tracelog/internal/core/domain"
@@ -244,5 +246,50 @@ func TestRegisterTechnicalEventReportsDuplicate(t *testing.T) {
 	}
 	if !result.Duplicate {
 		t.Fatal("Duplicate = false, want true when the repository did not create a row")
+	}
+}
+
+func TestRegisterTechnicalEventTruncatesOversizedIdentifiers(t *testing.T) {
+	repo := &stubTechnicalEventRepository{}
+	uc := NewRegisterTechnicalEventUseCase(repo)
+
+	result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+		ExternalID:       strings.Repeat("é", 300),
+		TraceID:          strings.Repeat("t", 129),
+		CorrelationID:    strings.Repeat("c", 128),
+		Message:          "x",
+		IngestionChannel: domain.IngestionHTTP,
+		ApplicationID:    "550e8400-e29b-41d4-a716-446655440000",
+		SourceID:         "660e8400-e29b-41d4-a716-446655440001",
+		EnvironmentID:    "770e8400-e29b-41d4-a716-446655440002",
+	})
+	if err != nil {
+		t.Fatalf("Execute() unexpected error = %v", err)
+	}
+
+	event := result.Event
+	if got := utf8.RuneCountInString(event.ExternalID); got != 255 {
+		t.Fatalf("ExternalID length = %d characters, want 255", got)
+	}
+	if !utf8.ValidString(event.ExternalID) {
+		t.Fatal("ExternalID was cut in the middle of a UTF-8 sequence")
+	}
+	if len(event.TraceID) != 128 {
+		t.Fatalf("TraceID length = %d, want 128", len(event.TraceID))
+	}
+	if len(event.CorrelationID) != 128 {
+		t.Fatalf("CorrelationID length = %d, want 128 (at the limit, untouched)", len(event.CorrelationID))
+	}
+
+	meta, _ := event.Payload["_ingestion"].(map[string]any)
+	warnings, _ := meta["normalization_warnings"].([]string)
+	joined := strings.Join(warnings, "; ")
+	for _, want := range []string{"external_id truncated from 300 to 255", "trace_id truncated from 129 to 128"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("warnings = %q, want %q", joined, want)
+		}
+	}
+	if strings.Contains(joined, "correlation_id truncated") {
+		t.Fatalf("warnings = %q, correlation_id at the limit must not be reported", joined)
 	}
 }

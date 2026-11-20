@@ -98,19 +98,23 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 	applicationID, sourceID, environmentID, idNotes := normalizeReferenceIDs(input, defaults)
 	notes = append(notes, idNotes...)
 
+	externalID := truncateField(input.ExternalID, "external_id", maxExternalIDLength, &notes)
+	traceID := truncateField(input.TraceID, "trace_id", maxTraceIDLength, &notes)
+	correlationID := truncateField(input.CorrelationID, "correlation_id", maxCorrelationIDLength, &notes)
+
 	enrichPayload(payload, input.RawRequestBody, input.OccurredAt, input.DecodeError, notes)
 	severity := deriveSeverity(message, category, payload)
 
 	event := &domain.TechnicalEvent{
-		ExternalID:          strings.TrimSpace(input.ExternalID),
+		ExternalID:          externalID,
 		OccurredAt:          occurredAt,
 		ReceivedAt:          receivedAt,
 		Message:             message,
 		Severity:            severity,
 		Category:            category,
 		Payload:             payload,
-		TraceID:             strings.TrimSpace(input.TraceID),
-		CorrelationID:       strings.TrimSpace(input.CorrelationID),
+		TraceID:             traceID,
+		CorrelationID:       correlationID,
 		RawLine:             strings.TrimSpace(input.RawLine),
 		NormalizationStatus: normalizationStatus,
 		ParseError:          strings.TrimSpace(input.ParseError),
@@ -138,6 +142,27 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 	}
 
 	return &RegisterTechnicalEventResult{Event: event, Duplicate: !created}, nil
+}
+
+// Column sizes of technical_event (migrations/000001). Longer values are truncated
+// instead of rejected (spec 0002, seção 4.5).
+const (
+	maxExternalIDLength    = 255
+	maxTraceIDLength       = 128
+	maxCorrelationIDLength = 128
+)
+
+// truncateField trims value and cuts it to max characters (runes, as VARCHAR counts),
+// recording a normalization warning when it had to cut.
+func truncateField(value, field string, max int, notes *[]string) string {
+	value = strings.TrimSpace(value)
+	runes := []rune(value)
+	if len(runes) <= max {
+		return value
+	}
+
+	*notes = append(*notes, fmt.Sprintf("%s truncated from %d to %d characters", field, len(runes), max))
+	return string(runes[:max])
 }
 
 func validateRegisterTechnicalEventInput(input RegisterTechnicalEventInput) error {
