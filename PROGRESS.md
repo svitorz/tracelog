@@ -4,15 +4,15 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 
 ## Fase atual
 
-**Fase 1 (rede de segurança e CI) concluída** no branch `chore/ci-baseline`. Aguardando "continuar" e as decisões da Fase 1 abaixo.
+**Fase 2 (robustez da API HTTP) concluída** no branch `fix/http-hardening` (21 commits sobre `main`, sem push). Aguardando "continuar" para a Fase 3.
 
 ## Checklist
 
 | Fase | Branch | Status |
 |------|--------|--------|
 | 0. Orientação | `chore/ci-baseline` | concluída |
-| 1. Rede de segurança e CI | `chore/ci-baseline` | concluída (CI ainda não rodou no GitHub: depende do push) |
-| 2. Robustez da API HTTP | `fix/http-hardening` | pendente |
+| 1. Rede de segurança e CI | `chore/ci-baseline` | concluída; PR #1 mergeado; CI verde no PR e no push para `main` |
+| 2. Robustez da API HTTP | `fix/http-hardening` | concluída (CI do branch só roda após push/PR) |
 | 3. Container e migrations | `feat/container` | pendente |
 | 4. Dados de exemplo e demo | `feat/sample-data` | pendente |
 | 5. Medição de banco (opcional) | — | só se pedido |
@@ -33,6 +33,18 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 |------|---------|--------|
 | 2026-11-20 | Licença GPL-3.0, não MIT. Na Fase 1, o item "adicionar LICENSE MIT" vira "commitar o `LICENSE` GPL-3.0 e o README já ajustados" | Decisão do autor; o working tree e o `AGENTS.md` já estavam em GPL-3.0 |
 | 2026-11-20 | Spec 0001 na v0.1.0: só a parte de duplicidade. Unicidade `(application_id, external_id) WHERE external_id IS NOT NULL` por migration nova; duplicata responde `200` com `"duplicate": true` e o evento existente. Ficam para depois da v0.1.0: `external_id` obrigatório (D5) e `POST /events/batch` (D3). A spec será atualizada na Fase 2 para registrar o recorte | Mantém a Fase 2 pequena e preserva a política de ingestão tolerante (H5): sem `external_id`, o evento continua sendo gravado. Descartado: 409, que obrigaria o cliente a tratar erro num reenvio que deu certo |
+| 2026-11-20 | Fase 2 guiada pela spec 0002 (`docs/specs/0002-endurecimento-da-api-http.md`), escrita antes do código | `AGENTS.md` exige spec para mudança de contrato (rotas, status, config, schema, saída da CLI) |
+| 2026-11-20 | H7: palavra inteira + flexões + CamelCase `*Error`/`*Exception` | Remove falsos positivos de substring ("terror", "crashpad"); negação continua não tratada e está documentada em teste. Descartado: manter substring |
+| 2026-11-20 | H8: colunas `ERRORS`, `FATAL`, `TOTAL`; dia em UTC | Nada some e a distinção fica visível. Descartado: somar fatal em uma coluna; manter só error |
+| 2026-11-20 | H6: `/health` liveness sem banco + `/ready` com ping de 2s | Banco lento não faz o orquestrador matar processo saudável. Descartado: só `/health` checando banco |
+| 2026-11-20 | `Content-Type` explícito não JSON → 415; ausente aceito | Decisão do autor (eu havia recomendado não obrigatório). Consequência: `curl -d` sem `-H 'Content-Type: application/json'` manda form-urlencoded e recebe 415 |
+| 2026-11-20 | `payload.level` ignorado para severidade no canal http; vale no file | Cumpre a regra "severity não é confiável vinda do cliente" sem perder o nível das linhas de log |
+| 2026-11-20 | Campos maiores que a coluna são truncados por caractere e anotados | Decisão do autor (eu havia recomendado 422). Risco aceito: `external_id` longos com o mesmo prefixo de 255 viram duplicata |
+| 2026-11-20 | Mapeamento de erros: só 405, 413, 415 e 500 genérico; sem 400/409/422 | Com ingestão tolerante, dedupe em 200 e truncagem, nenhum caso atual produz 400/409/422; criar erros tipados para eles seria código morto. Único erro tipado: `ports.ErrReferenceNotFound` (H9) |
+| 2026-11-20 | Timeouts: header 5s, read 15s, write 15s, idle 60s, handler 10s, shutdown 8s, `/ready` 2s | Justificativa na spec 0002 §4.1; shutdown abaixo dos 10s do Docker antes do SIGKILL |
+| 2026-11-20 | Pool: 10 abertas, 10 ociosas, vida 30m, ociosidade 5m | Teto contra esgotar `max_connections` (100); constantes no código, sem nova variável de ambiente |
+| 2026-11-20 | Testes de integração opcionais via `TRACELOG_TEST_DATABASE_URL`, schema descartável por teste, com `timezone=America/Sao_Paulo` | `go test ./...` continua sem banco (AGENTS.md §9); schema próprio permite apontar para qualquer banco sem tocar tabelas; fuso não-UTC prova a agregação em UTC. CI ganhou serviço `postgres:16-alpine` |
+| 2026-11-20 | Saída de `metrics errors` toda em stdout | Corrige parte do H18 no código que já estava sendo reescrito; o resto do H18 (`cmd/db.go`, demais comandos) continua pendente |
 | 2026-11-20 | `go.mod`: `go 1.26.11` (era 1.24.4) | 1.24 fora de suporte; 1.26 é suportada. Patch explícito para o CI e o `GOTOOLCHAIN=auto` local usarem a mesma versão; o custo é atualizar o patch manualmente. Descartado: `go 1.26` sem patch (versão efetiva menos previsível) e 1.27 (mais nova, sem necessidade) |
 | 2026-11-20 | Makefile mínimo criado só na Fase 3 (`test`, `lint`, `up`, `migrate`, `demo`); CI continua chamando `go` direto | Antes disso os alvos `up`/`migrate`/`demo` seriam vazios ou falsos. CI direto deixa claro no log qual passo falhou. Descartado: sem Makefile (perde o atalho e a descoberta de comandos) |
 | 2026-11-20 | `go.mod` não foi alterado | Não há divergência: `go.mod` = 1.24.4 = Go local. As menções a 1.25+/1.21+ estão erradas nos docs (Fase 6). A atualização de versão ficou como decisão pendente 5 |
@@ -66,6 +78,29 @@ Limitação: as provas HTTP foram feitas com `curl` contra o binário real, não
 | `LICENSE` | idêntico byte a byte a `/usr/share/common-licenses/GPL-3` |
 
 Limitação: o workflow só roda de verdade no GitHub depois do push.
+
+## Medições (Fase 2)
+
+Teste de fumaça com o binário real contra `postgres:16-alpine` descartável (`tracelog-it-pg`, 127.0.0.1:55433, removido ao final), migrations 000001–000003 aplicadas e `init < /dev/null`.
+
+| Critério (spec 0002 §7) | Resultado medido |
+|--------------------------|------------------|
+| 1. SIGTERM com upload lento em andamento (~900 KB a 300 KB/s) | requisição terminou com 201; conexão nova recusada logo após o sinal; processo saiu e imprimiu `Shutdown complete` |
+| 2. Corpo de 2 MB | 413 `request body exceeds 1048576 bytes`, nada gravado |
+| 3. `text/plain` / sem Content-Type | 415 / 201 |
+| 4. Banco parado durante `POST /events` | 500 `{"error":"internal error"}`; detalhe (`dial tcp ... connection refused`) só no log |
+| 5. Mesmo `external_id` duas vezes | 201 e 200 `duplicate:true`, mesmo `id`; apps diferentes coberto por teste de integração |
+| 6. `/ready` com banco parado / de volta | 503 / 200; `/health` 200 nos dois casos; `DELETE /health` → 405 com `Allow: GET, HEAD` |
+| 7. `payload.level=fatal` via HTTP | gravado `info` |
+| `"terror alert dismissed"` | gravado `info` (antes: `error`) |
+| `external_id` de 300 caracteres | 201, gravado com 255 |
+| JSON inválido | 201 com `raw_request_body`; eventos válidos ficam sem a cópia |
+| `metrics errors --from 2026-03-03 --to 2026-03-03` | mostra o dia 3 com ERRORS 1, FATAL 1 (antes o dia 3 ficava fora e fatal não contava) |
+| `go test -race -count=1 ./...` | ok em 5 pacotes; integração: 4 testes passam com banco, 4 `SKIP` sem |
+| Teste de dedupe sem a migration 000003 | falha com SQLSTATE 42P10, confirmando a dependência da migration |
+| Tabela de severidade contra o código antigo | falhavam exatamente os 4 casos de falso positivo por substring |
+
+Limitações: nenhum teste de carga; os timeouts foram verificados por configuração e pelo teste de shutdown, não por ataque *slowloris* real.
 
 ## Achados verificados
 
@@ -110,9 +145,12 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 - Na máquina local a porta 5432 já está publicada por `ecommerce-db-1` (0.0.0.0). Com o `.env.example` atual (`DB_HOST=localhost`, `DB_PORT=5432`), o compose do TraceLog não sobe e a CLI conectaria no Postgres de outro projeto. → Fase 3.
 - `go fix -diff` (Go 1.26) sugere modernizações (`strings.CutPrefix`, `maps.Copy`). Não aplicadas: refatoração sem mudança de comportamento; avaliar num commit `refactor:` à parte.
 - O guia diz "Go 1.24.4+"; agora o correto é 1.26.11. → Fase 6.
-- `serve` imprime "listening" antes de efetivamente abrir a porta.
+- ~~`serve` imprime "listening" antes de abrir a porta.~~ Corrigido na fase 2 (listen antes da mensagem).
+- `curl -d` sem `-H 'Content-Type: application/json'` agora recebe 415: README e docs precisam mostrar sempre o cabeçalho. → Fase 6.
+- `cmd.Printf`/`cmd.Println` (stderr) continuam em `init`, `serve`, `events list`, `import logs`, `db list`; só `metrics errors` foi corrigido. → Fase 4/6 ou commit próprio.
+- `docs/http-api.md`, `docs/cli.md`, `docs/domain.md` não foram atualizados na fase 2 (só o guia, como pede o AGENTS.md). → Fase 6.
 - `LoadBasicSetup` usa sempre o registro mais antigo de cada tabela como fallback, mesmo que `init` seja rodado com outra `service_key`.
 
 ## Próximo passo
 
-Depois do push, conferir o primeiro run do CI; "continuar" inicia a Fase 2 no branch `fix/http-hardening`.
+Push de `fix/http-hardening`, PR e conferir o CI (agora com PostgreSQL de serviço). "continuar" inicia a Fase 3 (`feat/container`), que começa com a decisão sobre migrations (`tracelog migrate` embutido x goose/golang-migrate x serviço psql) e setup não interativo.
