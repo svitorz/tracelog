@@ -25,7 +25,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 2. ~~**Spec 0001 x prompt.**~~ Decidido: só dedupe na v0.1.0 (ver log de decisões). Texto original: `docs/specs/0001-ingestao-em-lote-idempotente.md` (não commitada, marcada "Aprovada") já decide H4: unicidade `(application_id, external_id)`, duplicata responde `200` com `"duplicate": true`, `external_id` obrigatório no HTTP (400) e cria `POST /events/batch`. Isso conflita com "decida comigo 409 ou devolver existente", com H5 ("não perder evento": sem `external_id` decodificável a requisição viraria 400) e com o escopo enxuto da Fase 2.
 3. ~~**Arquivos não commitados.**~~ Decidido: commitados na Fase 1, um commit por arquivo lógico.
 4. ~~**Makefile.**~~ Decidido: criar na Fase 3 (ver log de decisões).
-5. **Versão do Go** (Fase 1): o `go.mod` fixa 1.24.4. Em 2026-11-20 o go.dev lista como suportadas 1.27.4 e 1.26.11; a linha 1.24 está fora de suporte e a última correção dela é 1.24.13. O CI instala exatamente 1.24.4.
+5. ~~**Versão do Go.**~~ Decidido: 1.26.11 (ver log de decisões).
 
 ## Log de decisões
 
@@ -33,6 +33,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 |------|---------|--------|
 | 2026-11-20 | Licença GPL-3.0, não MIT. Na Fase 1, o item "adicionar LICENSE MIT" vira "commitar o `LICENSE` GPL-3.0 e o README já ajustados" | Decisão do autor; o working tree e o `AGENTS.md` já estavam em GPL-3.0 |
 | 2026-11-20 | Spec 0001 na v0.1.0: só a parte de duplicidade. Unicidade `(application_id, external_id) WHERE external_id IS NOT NULL` por migration nova; duplicata responde `200` com `"duplicate": true` e o evento existente. Ficam para depois da v0.1.0: `external_id` obrigatório (D5) e `POST /events/batch` (D3). A spec será atualizada na Fase 2 para registrar o recorte | Mantém a Fase 2 pequena e preserva a política de ingestão tolerante (H5): sem `external_id`, o evento continua sendo gravado. Descartado: 409, que obrigaria o cliente a tratar erro num reenvio que deu certo |
+| 2026-11-20 | `go.mod`: `go 1.26.11` (era 1.24.4) | 1.24 fora de suporte; 1.26 é suportada. Patch explícito para o CI e o `GOTOOLCHAIN=auto` local usarem a mesma versão; o custo é atualizar o patch manualmente. Descartado: `go 1.26` sem patch (versão efetiva menos previsível) e 1.27 (mais nova, sem necessidade) |
 | 2026-11-20 | Makefile mínimo criado só na Fase 3 (`test`, `lint`, `up`, `migrate`, `demo`); CI continua chamando `go` direto | Antes disso os alvos `up`/`migrate`/`demo` seriam vazios ou falsos. CI direto deixa claro no log qual passo falhou. Descartado: sem Makefile (perde o atalho e a descoberta de comandos) |
 | 2026-11-20 | `go.mod` não foi alterado | Não há divergência: `go.mod` = 1.24.4 = Go local. As menções a 1.25+/1.21+ estão erradas nos docs (Fase 6). A atualização de versão ficou como decisão pendente 5 |
 | 2026-11-20 | CI em um único job (`ubuntu-24.04`) com gofmt, `go vet`, `go test -race -count=1`, `go build`; `actions/checkout@v7.0.1` e `actions/setup-go@v7.1.0` fixadas por SHA; `go-version-file: go.mod`; `permissions: contents: read`; `persist-credentials: false` | Um job basta para 3 pacotes com teste (~1s cada). SHA evita que uma tag reescrita mude o que roda. Descartado: matriz de versões de Go/SO (custo sem ganho para um binário único) e golangci-lint (dependência nova; propor depois se houver demanda) |
@@ -60,6 +61,7 @@ Limitação: as provas HTTP foram feitas com `curl` contra o binário real, não
 | Passo gofmt do CI rodado localmente no repo | exit 0 |
 | Mesmo passo numa cópia com `bad.go` mal formatado | lista `bad.go`, exit 1 |
 | `go vet ./...`, `go test -race -count=1 ./...`, `go build -o bin/tracelog .` | ok |
+| Com Go 1.26.11: `gofmt -l`, `go vet`, `go test -race -count=1`, `go build`; `go mod tidy` não alterou nada além da diretiva | ok |
 | YAML do workflow | parseia (PyYAML); actionlint não instalado, não validado com ele |
 | `LICENSE` | idêntico byte a byte a `/usr/share/common-licenses/GPL-3` |
 
@@ -106,9 +108,11 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 - `events list` trunca a mensagem por bytes (`message[:97]`), podendo cortar UTF-8 no meio.
 - `.gitignore` ignora `*.log`: arquivos em `examples/logs/*.log` não seriam commitados. → Fase 4.
 - Na máquina local a porta 5432 já está publicada por `ecommerce-db-1` (0.0.0.0). Com o `.env.example` atual (`DB_HOST=localhost`, `DB_PORT=5432`), o compose do TraceLog não sobe e a CLI conectaria no Postgres de outro projeto. → Fase 3.
+- `go fix -diff` (Go 1.26) sugere modernizações (`strings.CutPrefix`, `maps.Copy`). Não aplicadas: refatoração sem mudança de comportamento; avaliar num commit `refactor:` à parte.
+- O guia diz "Go 1.24.4+"; agora o correto é 1.26.11. → Fase 6.
 - `serve` imprime "listening" antes de efetivamente abrir a porta.
 - `LoadBasicSetup` usa sempre o registro mais antigo de cada tabela como fallback, mesmo que `init` seja rodado com outra `service_key`.
 
 ## Próximo passo
 
-Decidir versão do Go (5); depois do push, conferir o primeiro run do CI; "continuar" inicia a Fase 2 no branch `fix/http-hardening`.
+Depois do push, conferir o primeiro run do CI; "continuar" inicia a Fase 2 no branch `fix/http-hardening`.
