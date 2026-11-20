@@ -41,3 +41,41 @@ func TestDefaultLogLineCategorizer(t *testing.T) {
 		})
 	}
 }
+
+func TestCategorizerKeepsPartialStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		parsed     parsedLogLine
+		wantCat    domain.EventCategory
+		wantStatus domain.NormalizationStatus
+	}{
+		{
+			name:       "unparseable timestamp stays partial even with a known category",
+			parsed:     parsedLogLine{Message: "account locked after repeated login failures", Format: "timestamp_level_message", NormalizationStatus: domain.NormalizationStatusPartial},
+			wantCat:    domain.CategorySecurity,
+			wantStatus: domain.NormalizationStatusPartial,
+		},
+		{
+			name:       "plain text without timestamp stays partial",
+			parsed:     parsedLogLine{Message: "upstream connection reset by peer", Format: "plain_text", NormalizationStatus: domain.NormalizationStatusPartial},
+			wantCat:    domain.CategorySystem,
+			wantStatus: domain.NormalizationStatusPartial,
+		},
+		{
+			name:       "fully parsed line stays normalized",
+			parsed:     parsedLogLine{Message: "database connection refused", Format: "json", NormalizationStatus: domain.NormalizationStatusNormalized},
+			wantCat:    domain.CategorySystem,
+			wantStatus: domain.NormalizationStatusNormalized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.parsed.Payload = map[string]any{}
+			cat, status := defaultLogLineCategorizer{}.Categorize(tt.parsed)
+			if cat != tt.wantCat || status != tt.wantStatus {
+				t.Fatalf("Categorize() = (%q, %q), want (%q, %q)", cat, status, tt.wantCat, tt.wantStatus)
+			}
+		})
+	}
+}

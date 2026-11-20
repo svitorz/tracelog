@@ -449,14 +449,11 @@ var (
 	systemWords         = []string{"database", "disk", "memory", "cpu", "network", "timeout", "timeouts", "connection", "connections", "postgres", "redis", "kafka"}
 )
 
+// promoteNormalizationStatus keeps the parser's verdict and only fills it when missing.
+// Recognizing a category must not hide a parse failure: a line whose timestamp could not
+// be read stays "partial" (spec 0004).
 func promoteNormalizationStatus(current domain.NormalizationStatus, desired domain.NormalizationStatus) domain.NormalizationStatus {
-	if current == domain.NormalizationStatusNormalized {
-		return current
-	}
 	if current == "" {
-		return desired
-	}
-	if desired == domain.NormalizationStatusNormalized {
 		return desired
 	}
 	return current
