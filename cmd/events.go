@@ -39,7 +39,7 @@ var eventsListCmd = &cobra.Command{
 			return fmt.Errorf("invalid --from value: %w", err)
 		}
 
-		occurredTo, err := parsePeriodValue(eventsTo)
+		occurredTo, err := parsePeriodEnd(eventsTo)
 		if err != nil {
 			return fmt.Errorf("invalid --to value: %w", err)
 		}
@@ -79,7 +79,7 @@ func init() {
 	eventsListCmd.Flags().StringVar(&eventsApplicationID, "application-id", "", "Filter by application UUID")
 	eventsListCmd.Flags().StringVar(&eventsEnvironmentID, "environment-id", "", "Filter by environment UUID")
 	eventsListCmd.Flags().StringVar(&eventsFrom, "from", "", "Period start (RFC3339 or YYYY-MM-DD)")
-	eventsListCmd.Flags().StringVar(&eventsTo, "to", "", "Period end (RFC3339 or YYYY-MM-DD)")
+	eventsListCmd.Flags().StringVar(&eventsTo, "to", "", "Period end (RFC3339, or YYYY-MM-DD to include the whole day)")
 	eventsListCmd.Flags().IntVar(&eventsLimit, "limit", 50, "Maximum number of events to return")
 
 	eventsListCmd.Example = strings.Join([]string{
@@ -94,7 +94,18 @@ func init() {
 	rootCmd.AddCommand(eventsCmd)
 }
 
+// parsePeriodValue parses a --from value: RFC3339, or YYYY-MM-DD as 00:00 UTC.
 func parsePeriodValue(raw string) (*time.Time, error) {
+	return parsePeriod(raw, false)
+}
+
+// parsePeriodEnd parses a --to value. YYYY-MM-DD covers the whole day (up to
+// 23:59:59.999999999 UTC), so --to 2026-03-09 includes events of the 9th.
+func parsePeriodEnd(raw string) (*time.Time, error) {
+	return parsePeriod(raw, true)
+}
+
+func parsePeriod(raw string, endOfDay bool) (*time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil, nil
@@ -107,6 +118,9 @@ func parsePeriodValue(raw string) (*time.Time, error) {
 
 	if t, err := time.Parse("2006-01-02", raw); err == nil {
 		v := t.UTC()
+		if endOfDay {
+			v = v.Add(24*time.Hour - time.Nanosecond)
+		}
 		return &v, nil
 	}
 

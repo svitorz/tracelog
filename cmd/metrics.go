@@ -35,7 +35,7 @@ var metricsErrorsCmd = &cobra.Command{
 			return fmt.Errorf("invalid --from value: %w", err)
 		}
 
-		occurredTo, err := parsePeriodValue(metricsErrorsTo)
+		occurredTo, err := parsePeriodEnd(metricsErrorsTo)
 		if err != nil {
 			return fmt.Errorf("invalid --to value: %w", err)
 		}
@@ -72,7 +72,7 @@ func init() {
 	metricsErrorsCmd.Flags().StringVar(&metricsErrorsApplicationID, "application-id", "", "Filter by application UUID")
 	metricsErrorsCmd.Flags().StringVar(&metricsErrorsEnvironmentID, "environment-id", "", "Filter by environment UUID")
 	metricsErrorsCmd.Flags().StringVar(&metricsErrorsFrom, "from", "", "Period start (RFC3339 or YYYY-MM-DD)")
-	metricsErrorsCmd.Flags().StringVar(&metricsErrorsTo, "to", "", "Period end (RFC3339 or YYYY-MM-DD)")
+	metricsErrorsCmd.Flags().StringVar(&metricsErrorsTo, "to", "", "Period end (RFC3339, or YYYY-MM-DD to include the whole day)")
 
 	metricsErrorsCmd.Example = strings.Join([]string{
 		"  # Show error frequency for all applications",
