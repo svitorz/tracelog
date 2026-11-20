@@ -175,3 +175,42 @@ func TestRegisterEventPropagatesRequestContext(t *testing.T) {
 		t.Fatal("repository context has no deadline, want the per-request timeout")
 	}
 }
+
+func TestRegisterEventChecksContentType(t *testing.T) {
+	tests := []struct {
+		contentType string
+		wantStatus  int
+	}{
+		{"", http.StatusCreated},
+		{"application/json", http.StatusCreated},
+		{"application/json; charset=utf-8", http.StatusCreated},
+		{"application/vnd.api+json", http.StatusCreated},
+		{"text/plain", http.StatusUnsupportedMediaType},
+		{"application/x-www-form-urlencoded", http.StatusUnsupportedMediaType},
+		{"not a media type;;", http.StatusUnsupportedMediaType},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.contentType, func(t *testing.T) {
+			repo := &fakeEventRepository{}
+			h := newTestServer(t, repo, 1<<20)
+
+			header := map[string]string{}
+			if tt.contentType != "" {
+				header["Content-Type"] = tt.contentType
+			}
+			rec := postEvent(t, h, `{"message":"x"}`, header)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+			wantSaved := 0
+			if tt.wantStatus == http.StatusCreated {
+				wantSaved = 1
+			}
+			if repo.count() != wantSaved {
+				t.Fatalf("saved events = %d, want %d", repo.count(), wantSaved)
+			}
+		})
+	}
+}

@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"strings"
 	"time"
 
 	"svitorz/tracelog/internal/core/domain"
@@ -32,6 +34,11 @@ func NewEventHandler(registerUseCase *services.RegisterTechnicalEventUseCase, ma
 func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	if contentType := r.Header.Get("Content-Type"); contentType != "" && !isJSONMediaType(contentType) {
+		respondError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
 		return
 	}
 
@@ -87,6 +94,17 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 	}
 
 	respondJSON(w, http.StatusCreated, response)
+}
+
+// isJSONMediaType accepts application/json and structured syntax suffixes such as
+// application/vnd.api+json. A missing Content-Type is handled by the caller.
+func isJSONMediaType(value string) bool {
+	mediaType, _, err := mime.ParseMediaType(value)
+	if err != nil {
+		return false
+	}
+
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
 }
 
 func respondJSON(w http.ResponseWriter, status int, data any) {
