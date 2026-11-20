@@ -3,6 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net"
+	"os"
+	"os/signal"
+	"syscall"
 
 	httpadapter "svitorz/tracelog/internal/adapters/http"
 	"svitorz/tracelog/internal/adapters/repository"
@@ -54,16 +58,24 @@ var serveCmd = &cobra.Command{
 		eventRepo := repository.NewPostgresTechnicalEventRepository(db)
 		registerUseCase := services.NewRegisterTechnicalEventUseCase(eventRepo, setupRepo)
 
-		addr := fmt.Sprintf(":%d", port)
-		server := httpadapter.NewServer(addr, registerUseCase)
+		server := httpadapter.NewServer(fmt.Sprintf(":%d", port), registerUseCase)
+
+		ln, err := net.Listen("tcp", server.Addr())
+		if err != nil {
+			return fmt.Errorf("failed to listen on port %d: %w", port, err)
+		}
+
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
 
 		cmd.Printf("[serve] HTTP server listening on port %d\n", port)
 		cmd.Printf("[serve] Ready to receive events at POST /events\n")
 
-		if err := server.Start(); err != nil {
-			return fmt.Errorf("HTTP server failed: %w", err)
+		if err := server.Serve(ctx, ln); err != nil {
+			return err
 		}
 
+		cmd.Printf("[serve] Shutdown complete\n")
 		return nil
 	},
 }
