@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewServerConfiguresTimeouts(t *testing.T) {
-	s := NewServer(":0", nil)
+	s := NewServer(ServerConfig{Addr: ":0", MaxBodyBytes: 1024}, nil)
 
 	got := map[string]time.Duration{
 		"ReadHeaderTimeout": s.httpServer.ReadHeaderTimeout,
@@ -30,7 +30,7 @@ func TestServeFinishesInFlightRequestOnShutdown(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 
-	s := NewServer("", nil)
+	s := NewServer(ServerConfig{MaxBodyBytes: 1024}, nil)
 	s.httpServer.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		close(started)
 		<-release
@@ -87,7 +87,7 @@ func TestServeReturnsErrorWhenShutdownTimesOut(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 
-	s := NewServer("", nil)
+	s := NewServer(ServerConfig{MaxBodyBytes: 1024}, nil)
 	s.shutdownTimeout = 50 * time.Millisecond
 	s.httpServer.Handler = http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		close(started)

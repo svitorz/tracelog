@@ -10,12 +10,14 @@ import (
 )
 
 const (
-	defaultAppName   = "tracelog"
-	defaultAppEnv    = "local"
-	defaultHTTPPort  = 8080
-	defaultDBHost    = "localhost"
-	defaultDBPort    = 5432
-	defaultDBSSLMode = "disable"
+	defaultAppName  = "tracelog"
+	defaultAppEnv   = "local"
+	defaultHTTPPort = 8080
+	// 1 MiB (spec 0002, seção 5).
+	defaultHTTPMaxBodyBytes = 1 << 20
+	defaultDBHost           = "localhost"
+	defaultDBPort           = 5432
+	defaultDBSSLMode        = "disable"
 )
 
 // Config concentra toda configuração da aplicação.
@@ -31,7 +33,8 @@ type AppConfig struct {
 }
 
 type HTTPConfig struct {
-	Port int
+	Port         int
+	MaxBodyBytes int64
 }
 
 type DBConfig struct {
@@ -67,6 +70,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	maxBodyBytes, err := envInt("HTTP_MAX_BODY_BYTES", defaultHTTPMaxBodyBytes)
+	if err != nil {
+		return Config{}, err
+	}
+
 	dbPort, err := envInt("DB_PORT", defaultDBPort)
 	if err != nil {
 		return Config{}, err
@@ -78,7 +86,8 @@ func Load() (Config, error) {
 			Env:  envString("APP_ENV", defaultAppEnv),
 		},
 		HTTP: HTTPConfig{
-			Port: httpPort,
+			Port:         httpPort,
+			MaxBodyBytes: int64(maxBodyBytes),
 		},
 		DB: DBConfig{
 			Host:     envString("DB_HOST", defaultDBHost),
@@ -111,6 +120,10 @@ func (c Config) Validate() error {
 
 	if err := validatePort(c.HTTP.Port, "HTTP_PORT"); err != nil {
 		validationErrors = append(validationErrors, err.Error())
+	}
+
+	if c.HTTP.MaxBodyBytes <= 0 {
+		validationErrors = append(validationErrors, "HTTP_MAX_BODY_BYTES must be a positive number of bytes")
 	}
 
 	if strings.TrimSpace(c.DB.Host) == "" {

@@ -3,21 +3,29 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"svitorz/tracelog/internal/core/domain"
 	"svitorz/tracelog/internal/core/services"
 )
 
+// requestTimeout limits how long a single event registration may take (spec 0002, seção 4.1).
+const requestTimeout = 10 * time.Second
+
 // EventHandler handles HTTP operations for technical events.
 type EventHandler struct {
 	registerUseCase *services.RegisterTechnicalEventUseCase
+	maxBodyBytes    int64
 }
 
-func NewEventHandler(registerUseCase *services.RegisterTechnicalEventUseCase) *EventHandler {
+func NewEventHandler(registerUseCase *services.RegisterTechnicalEventUseCase, maxBodyBytes int64) *EventHandler {
 	return &EventHandler{
 		registerUseCase: registerUseCase,
+		maxBodyBytes:    maxBodyBytes,
 	}
 }
 
@@ -27,9 +35,14 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, h.maxBodyBytes))
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to read request body")
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			respondError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("request body exceeds %d bytes", tooLarge.Limit))
+			return
+		}
+		respondError(w, http.StatusBadRequest, "failed to read request body")
 		return
 	}
 
@@ -57,7 +70,10 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 		DecodeError:      decodeError,
 	}
 
-	event, err := h.registerUseCase.Execute(context.Background(), input)
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+
+	event, err := h.registerUseCase.Execute(ctx, input)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return

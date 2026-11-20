@@ -21,22 +21,28 @@ const (
 	shutdownTimeout   = 8 * time.Second
 )
 
+// ServerConfig groups the settings the HTTP adapter needs.
+type ServerConfig struct {
+	Addr         string
+	MaxBodyBytes int64
+}
+
 // Server is the main HTTP server for the MVP.
 type Server struct {
 	httpServer      *http.Server
 	shutdownTimeout time.Duration
 }
 
-func NewServer(addr string, registerUseCase *services.RegisterTechnicalEventUseCase) *Server {
+func NewServer(cfg ServerConfig, registerUseCase *services.RegisterTechnicalEventUseCase) *Server {
 	mux := http.NewServeMux()
-	eventHandler := NewEventHandler(registerUseCase)
+	eventHandler := NewEventHandler(registerUseCase, cfg.MaxBodyBytes)
 
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/events", eventHandler.HandleRegisterEvent)
 
 	return &Server{
 		httpServer: &http.Server{
-			Addr:              addr,
+			Addr:              cfg.Addr,
 			Handler:           mux,
 			ReadHeaderTimeout: readHeaderTimeout,
 			ReadTimeout:       readTimeout,

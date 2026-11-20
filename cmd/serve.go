@@ -58,7 +58,10 @@ var serveCmd = &cobra.Command{
 		eventRepo := repository.NewPostgresTechnicalEventRepository(db)
 		registerUseCase := services.NewRegisterTechnicalEventUseCase(eventRepo, setupRepo)
 
-		server := httpadapter.NewServer(fmt.Sprintf(":%d", port), registerUseCase)
+		server := httpadapter.NewServer(httpadapter.ServerConfig{
+			Addr:         fmt.Sprintf(":%d", port),
+			MaxBodyBytes: appConfig.HTTP.MaxBodyBytes,
+		}, registerUseCase)
 
 		ln, err := net.Listen("tcp", server.Addr())
 		if err != nil {
