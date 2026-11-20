@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"strings"
@@ -22,12 +23,14 @@ const requestTimeout = 10 * time.Second
 type EventHandler struct {
 	registerUseCase *services.RegisterTechnicalEventUseCase
 	maxBodyBytes    int64
+	logger          *slog.Logger
 }
 
-func NewEventHandler(registerUseCase *services.RegisterTechnicalEventUseCase, maxBodyBytes int64) *EventHandler {
+func NewEventHandler(registerUseCase *services.RegisterTechnicalEventUseCase, maxBodyBytes int64, logger *slog.Logger) *EventHandler {
 	return &EventHandler{
 		registerUseCase: registerUseCase,
 		maxBodyBytes:    maxBodyBytes,
+		logger:          logger,
 	}
 }
 
@@ -82,7 +85,12 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 
 	event, err := h.registerUseCase.Execute(ctx, input)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		// The error may carry SQL and constraint details: log it, never send it to the client.
+		h.logger.ErrorContext(r.Context(), "failed to register event",
+			"external_id", req.ExternalID,
+			"error", err,
+		)
+		respondError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 

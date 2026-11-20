@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -25,6 +26,8 @@ const (
 type ServerConfig struct {
 	Addr         string
 	MaxBodyBytes int64
+	// Logger receives internal error details. Nil means slog.Default().
+	Logger *slog.Logger
 }
 
 // Server is the main HTTP server for the MVP.
@@ -34,8 +37,13 @@ type Server struct {
 }
 
 func NewServer(cfg ServerConfig, registerUseCase *services.RegisterTechnicalEventUseCase) *Server {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	mux := http.NewServeMux()
-	eventHandler := NewEventHandler(registerUseCase, cfg.MaxBodyBytes)
+	eventHandler := NewEventHandler(registerUseCase, cfg.MaxBodyBytes, logger)
 
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/events", eventHandler.HandleRegisterEvent)

@@ -1,9 +1,12 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -73,8 +76,14 @@ func (fakeSetupRepository) LoadBasicSetup(context.Context) (*ports.BasicSystemSe
 
 func newTestServer(t *testing.T, repo *fakeEventRepository, maxBodyBytes int64) http.Handler {
 	t.Helper()
+	return newTestServerWithLog(t, repo, maxBodyBytes, &bytes.Buffer{})
+}
+
+func newTestServerWithLog(t *testing.T, repo *fakeEventRepository, maxBodyBytes int64, logs *bytes.Buffer) http.Handler {
+	t.Helper()
 	uc := services.NewRegisterTechnicalEventUseCase(repo, fakeSetupRepository{})
-	return NewServer(ServerConfig{MaxBodyBytes: maxBodyBytes}, uc).httpServer.Handler
+	logger := slog.New(slog.NewTextHandler(logs, nil))
+	return NewServer(ServerConfig{MaxBodyBytes: maxBodyBytes, Logger: logger}, uc).httpServer.Handler
 }
 
 func postEvent(t *testing.T, h http.Handler, body string, header map[string]string) *httptest.ResponseRecorder {
@@ -212,5 +221,27 @@ func TestRegisterEventChecksContentType(t *testing.T) {
 				t.Fatalf("saved events = %d, want %d", repo.count(), wantSaved)
 			}
 		})
+	}
+}
+
+func TestRegisterEventHidesInternalErrors(t *testing.T) {
+	internal := `ERROR: relation "technical_event" does not exist (SQLSTATE 42P01)`
+	repo := &fakeEventRepository{saveErr: errors.New(internal)}
+	logs := &bytes.Buffer{}
+	h := newTestServerWithLog(t, repo, 1<<20, logs)
+
+	rec := postEvent(t, h, `{"external_id":"e-1","message":"x"}`, nil)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	if got := decodeBody(t, rec)["error"]; got != "internal error" {
+		t.Fatalf("error = %q, want generic message", got)
+	}
+	if strings.Contains(rec.Body.String(), "SQLSTATE") {
+		t.Fatalf("response leaks internal details: %q", rec.Body.String())
+	}
+	if !strings.Contains(logs.String(), "SQLSTATE 42P01") {
+		t.Fatalf("server log = %q, want the internal error detail", logs.String())
 	}
 }
