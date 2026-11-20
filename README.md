@@ -200,4 +200,6 @@ Important current behaviors:
 
 ## License
 
-MIT License
+TraceLog is free software licensed under the [GNU General Public License v3.0](./LICENSE).
+
+Copyright (C) 2026 Vitor Fábio. See [LICENSE](./LICENSE) for the full terms.
