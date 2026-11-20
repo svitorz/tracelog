@@ -4,7 +4,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 
 ## Fase atual
 
-**Fase 3 (container e migrations) concluída** no branch `feat/container`, criado a partir de `fix/http-hardening` (que está no GitHub, sem PR nem merge). Aguardando "continuar" para a Fase 4.
+**Fase 4 (dados de exemplo e demo) concluída** no branch `feat/sample-data`, criado a partir de `feat/container` (que sai de `fix/http-hardening`). Nenhum dos três tem PR; só `fix/http-hardening` foi enviado ao GitHub. Aguardando "continuar". A Fase 5 é opcional (só se pedida); a próxima obrigatória é a 6 (auditoria da documentação).
 
 ## Checklist
 
@@ -14,7 +14,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 | 1. Rede de segurança e CI | `chore/ci-baseline` | concluída; PR #1 mergeado; CI verde no PR e no push para `main` |
 | 2. Robustez da API HTTP | `fix/http-hardening` | concluída; push feito, sem PR (CI não rodou) |
 | 3. Container e migrations | `feat/container` | concluída (sem push; depende de `fix/http-hardening`) |
-| 4. Dados de exemplo e demo | `feat/sample-data` | pendente |
+| 4. Dados de exemplo e demo | `feat/sample-data` | concluída (sem push; depende de `feat/container`); GIF pendente com o autor |
 | 5. Medição de banco (opcional) | — | só se pedido |
 | 6. Auditoria da documentação | `docs/audit` | pendente |
 | 7. Release v0.1.0 | `release/v0.1.0` | pendente |
@@ -34,6 +34,18 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 |------|---------|--------|
 | 2026-11-20 | Licença GPL-3.0, não MIT. Na Fase 1, o item "adicionar LICENSE MIT" vira "commitar o `LICENSE` GPL-3.0 e o README já ajustados" | Decisão do autor; o working tree e o `AGENTS.md` já estavam em GPL-3.0 |
 | 2026-11-20 | Spec 0001 na v0.1.0: só a parte de duplicidade. Unicidade `(application_id, external_id) WHERE external_id IS NOT NULL` por migration nova; duplicata responde `200` com `"duplicate": true` e o evento existente. Ficam para depois da v0.1.0: `external_id` obrigatório (D5) e `POST /events/batch` (D3). A spec será atualizada na Fase 2 para registrar o recorte | Mantém a Fase 2 pequena e preserva a política de ingestão tolerante (H5): sem `external_id`, o evento continua sendo gravado. Descartado: 409, que obrigaria o cliente a tratar erro num reenvio que deu certo |
+| 2026-11-20 | Fase 4 guiada pela spec 0004 (`docs/specs/0004-importacao-idempotente-e-dados-de-exemplo.md`) | Mudanças de CLI (remove `seed`, resumo do import) e de comportamento do import |
+| 2026-11-20 | `seed` removido | Dados de referência vêm do `init`; demonstração vem de `examples/logs` + `import logs`. Descartado: `seed` com dataset embutido (duplica o import, incha o binário) |
+| 2026-11-20 | Reimportação: `external_id = file:` + sha256(nome base, linha, conteúdo)[:32] | Usa a deduplicação da fase 2; nome base para host e container gerarem o mesmo ID. Descartado: só documentar |
+| 2026-11-20 | Categorizador: segurança antes de audit, palavra inteira | `login failed`/`unauthorized` caíam em audit; ramo security inalcançável |
+| 2026-11-20 | Linhas em branco puladas e contadas | Não têm informação. Descartado: gravar como uncategorizable |
+| 2026-11-20 | Erros do import: até 10 exemplos `arquivo:linha: motivo` | Operador precisa achar a linha; o motivo completo pode ir à CLI (diferente do HTTP) |
+| 2026-11-20 | Linha com `[` só é JSON se for JSON válido | Achado com o dataset: `[06/Mar/2026:...] WARN` virava texto puro sem nível |
+| 2026-11-20 | Categorizador não promove `partial` → `normalized` | Achado com o dataset: linha com timestamp ilegível aparecia como normalized |
+| 2026-11-20 | Gerador em Go (`tools/loggen`), dataset versionado = saída dele, teste de igualdade | Sem dependência, reproduzível entre SOs, coberto por vet/CI. Descartado: script shell (`$RANDOM`/`date` variam) |
+| 2026-11-20 | Import com `synchronous_commit=off`, mantendo um INSERT por linha | Medição mostrou problema real (fsync = ~90% do tempo). Descartados: transações em lote (port transacional), manter como está |
+| 2026-11-20 | H10 corrigido (aspas e escape no DSN) | Estava confirmado desde a fase 0 e eu ia mexer no DSN; teste com `pgconn.ParseConfig` + senha real `a b'c` |
+| 2026-11-20 | Demo usa a CLI dentro do container (`docker compose run`, exemplos em volume `:ro`) | Exige só Docker e curl, sem Go no host |
 | 2026-11-20 | Fase 3 guiada pela spec 0003 (`docs/specs/0003-container-e-migrations.md`) | Novo comando, nova flag, nova tabela e compose mudam contrato |
 | 2026-11-20 | Migrations: `tracelog migrate` com `go:embed` + `schema_migrations` + `pg_advisory_lock` | Sem dependência nova, funciona em container e CI. Descartados: goose/golang-migrate (dependência e peso), serviço psql (só resolve o compose) |
 | 2026-11-20 | Migrator no adapter de repositório, sem port/serviço | Migração é infraestrutura, não regra de negócio; um port só para isso seria camada a mais. SQL continua só no adapter |
@@ -92,6 +104,26 @@ Limitação: as provas HTTP foram feitas com `curl` contra o binário real, não
 
 Limitação: o workflow só roda de verdade no GitHub depois do push.
 
+## Medições (Fase 4)
+
+Máquina: Intel i5-1135G7 (8 threads), Linux 6.12, PostgreSQL `16.16-alpine` em Docker (volume local), binário no host. Banco descartável `tracelog-p4-pg` (127.0.0.1:55435), removido ao final.
+
+| Medição | Resultado |
+|---------|-----------|
+| Dataset versionado | 434 linhas, 60 KB (`checkout-api` 212, `auth-service` 173, `legacy-gateway` 49) |
+| Import do dataset (banco vazio) | 429 gravadas, 5 em branco puladas, 378 normalized, 20 partial, 31 uncategorizable |
+| Reimport do dataset | 0 gravadas, 429 duplicatas |
+| `metrics errors --from 2026-03-01 --to 2026-03-14` | 11 dias; pico em 2026-03-10 com 25 error + 1 fatal |
+| Volume gerado `-scale 200` | 80.271 linhas, 8,8 MB |
+| Import 80.266 linhas, `synchronous_commit=on` (antes) | 334,0 s (~240 linhas/s) |
+| Mesmo import, `synchronous_commit=off` só na conexão (depois) | 34,4 s (~2.330 linhas/s) |
+| Reimport das 80.266 (todas duplicatas) | 35,0 s |
+| Diagnóstico: 8.402 linhas com `ALTER DATABASE ... synchronous_commit` on/off | 34,2 s / 3,5 s |
+| Tabela após 80.266 eventos | 97 MB (`pg_total_relation_size`) |
+| `scripts/demo.sh` em projeto compose novo (imagens base em cache) | exit 0 em 32 s; segunda execução sem gravar nada |
+
+Limitações: uma máquina, uma execução por medição (sem média nem desvio), Docker local com disco SSD; o ganho do `synchronous_commit=off` depende do custo de fsync do disco. O reimport (35 s) não foi otimizado: cada duplicata faz o INSERT com conflito e um SELECT do existente.
+
 ## Medições (Fase 3)
 
 Projeto compose separado (`-p tracelog-phase3`, `--env-file` em scratch com `DB_PORT=55434` e `HTTP_PORT=18082`, porque a 5432 local é de outro projeto). Nenhum `.env` do repositório foi criado ou lido.
@@ -113,7 +145,7 @@ Projeto compose separado (`-p tracelog-phase3`, `--env-file` em scratch com `DB_
 
 Limitações: a primeira subida (32s) é dominada pelos intervalos dos healthchecks (5s no Postgres, 10s na API), não pelo trabalho; não medi em máquina limpa sem as imagens base em cache.
 
-Sobra do teste: o volume `tracelog-phase3_tracelog_postgres_data` (1 evento de teste) ficou na máquina; containers e rede foram removidos. Para apagá-lo: `docker volume rm tracelog-phase3_tracelog_postgres_data`.
+Sobra dos testes das fases 3 e 4: os volumes `tracelog-phase3_tracelog_postgres_data`, `tracelog-demo_tracelog_postgres_data` e `tracelog-demo2_tracelog_postgres_data` (só dados sintéticos) ficaram na máquina; containers e redes foram removidos. Para apagá-los: `docker volume rm tracelog-phase3_tracelog_postgres_data tracelog-demo_tracelog_postgres_data tracelog-demo2_tracelog_postgres_data`.
 
 ## Medições (Fase 2)
 
@@ -182,6 +214,10 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 - `go fix -diff` (Go 1.26) sugere modernizações (`strings.CutPrefix`, `maps.Copy`). Não aplicadas: refatoração sem mudança de comportamento; avaliar num commit `refactor:` à parte.
 - O guia diz "Go 1.24.4+"; agora o correto é 1.26.11. → Fase 6.
 - ~~`serve` imprime "listening" antes de abrir a porta.~~ Corrigido na fase 2 (listen antes da mensagem).
+- H11 (comentário inline no `.env` entra no valor) continua aberto: o parser caseiro não foi alterado. → Fase 6 (documentar) ou commit próprio.
+- `docs/demo.tape` usa `localhost:8080` no `curl`; com outro `HTTP_PORT` no `.env`, ajustar o roteiro.
+- A saída de `docs/demo-output.txt` tem uma linha em branco extra depois de cada JSON (o `-w` do curl começa com `\n`). Cosmético.
+- `events list` e `init` ainda escrevem parte da saída em stderr (`cmd.Println`); na demo isso não aparece porque a saída é capturada com `2>&1`.
 - `curl -d` sem `-H 'Content-Type: application/json'` agora recebe 415: README e docs precisam mostrar sempre o cabeçalho. → Fase 6.
 - `cmd.Printf`/`cmd.Println` (stderr) continuam em `init`, `serve`, `events list`, `import logs`, `db list`; só `metrics errors` foi corrigido. → Fase 4/6 ou commit próprio.
 - `docs/http-api.md`, `docs/cli.md`, `docs/domain.md` não foram atualizados na fase 2 (só o guia, como pede o AGENTS.md). → Fase 6.
@@ -189,4 +225,4 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 
 ## Próximo passo
 
-Abrir PR de `fix/http-hardening` (e depois de `feat/container`) para o CI rodar. "continuar" inicia a Fase 4 (`feat/sample-data`): dataset em `examples/logs/` (atenção ao `*.log` do `.gitignore`), gerador determinístico, decisão sobre `seed`, relatório de erros do import e `scripts/demo.sh` + alvo `make demo`.
+Autor: gerar o GIF (`make up` e depois `vhs docs/demo.tape`) e commitar `docs/demo.gif`; abrir PRs em cadeia (`fix/http-hardening` → `feat/container` → `feat/sample-data`) para o CI rodar. "continuar" inicia a Fase 6 (`docs/audit`), a menos que o autor peça a Fase 5 (medição de banco).
