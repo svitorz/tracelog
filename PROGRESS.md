@@ -24,7 +24,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 1. ~~**Licença.**~~ Decidido: GPL-3.0 (ver log de decisões).
 2. ~~**Spec 0001 x prompt.**~~ Decidido: só dedupe na v0.1.0 (ver log de decisões). Texto original: `docs/specs/0001-ingestao-em-lote-idempotente.md` (não commitada, marcada "Aprovada") já decide H4: unicidade `(application_id, external_id)`, duplicata responde `200` com `"duplicate": true`, `external_id` obrigatório no HTTP (400) e cria `POST /events/batch`. Isso conflita com "decida comigo 409 ou devolver existente", com H5 ("não perder evento": sem `external_id` decodificável a requisição viraria 400) e com o escopo enxuto da Fase 2.
 3. ~~**Arquivos não commitados.**~~ Decidido: commitados na Fase 1, um commit por arquivo lógico.
-4. **Makefile** (Fase 1): recomendação é criá-lo só na Fase 3, mínimo, quando `up`/`migrate`/`demo` existirem de fato.
+4. ~~**Makefile.**~~ Decidido: criar na Fase 3 (ver log de decisões).
 5. **Versão do Go** (Fase 1): o `go.mod` fixa 1.24.4. Em 2026-11-20 o go.dev lista como suportadas 1.27.4 e 1.26.11; a linha 1.24 está fora de suporte e a última correção dela é 1.24.13. O CI instala exatamente 1.24.4.
 
 ## Log de decisões
@@ -33,6 +33,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 |------|---------|--------|
 | 2026-11-20 | Licença GPL-3.0, não MIT. Na Fase 1, o item "adicionar LICENSE MIT" vira "commitar o `LICENSE` GPL-3.0 e o README já ajustados" | Decisão do autor; o working tree e o `AGENTS.md` já estavam em GPL-3.0 |
 | 2026-11-20 | Spec 0001 na v0.1.0: só a parte de duplicidade. Unicidade `(application_id, external_id) WHERE external_id IS NOT NULL` por migration nova; duplicata responde `200` com `"duplicate": true` e o evento existente. Ficam para depois da v0.1.0: `external_id` obrigatório (D5) e `POST /events/batch` (D3). A spec será atualizada na Fase 2 para registrar o recorte | Mantém a Fase 2 pequena e preserva a política de ingestão tolerante (H5): sem `external_id`, o evento continua sendo gravado. Descartado: 409, que obrigaria o cliente a tratar erro num reenvio que deu certo |
+| 2026-11-20 | Makefile mínimo criado só na Fase 3 (`test`, `lint`, `up`, `migrate`, `demo`); CI continua chamando `go` direto | Antes disso os alvos `up`/`migrate`/`demo` seriam vazios ou falsos. CI direto deixa claro no log qual passo falhou. Descartado: sem Makefile (perde o atalho e a descoberta de comandos) |
 | 2026-11-20 | `go.mod` não foi alterado | Não há divergência: `go.mod` = 1.24.4 = Go local. As menções a 1.25+/1.21+ estão erradas nos docs (Fase 6). A atualização de versão ficou como decisão pendente 5 |
 | 2026-11-20 | CI em um único job (`ubuntu-24.04`) com gofmt, `go vet`, `go test -race -count=1`, `go build`; `actions/checkout@v7.0.1` e `actions/setup-go@v7.1.0` fixadas por SHA; `go-version-file: go.mod`; `permissions: contents: read`; `persist-credentials: false` | Um job basta para 3 pacotes com teste (~1s cada). SHA evita que uma tag reescrita mude o que roda. Descartado: matriz de versões de Go/SO (custo sem ganho para um binário único) e golangci-lint (dependência nova; propor depois se houver demanda) |
 | 2026-11-20 | Verificação da Fase 0 feita com Postgres descartável próprio (`tracelog-phase0-pg`, 127.0.0.1:55432), removido ao final | Confirmar hipóteses executando sem tocar no banco do usuário; a 5432 local está ocupada por outro projeto (`ecommerce-db-1`) |
@@ -110,4 +111,4 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 
 ## Próximo passo
 
-Decidir Makefile (4) e versão do Go (5); depois do push, conferir o primeiro run do CI; "continuar" inicia a Fase 2 no branch `fix/http-hardening`.
+Decidir versão do Go (5); depois do push, conferir o primeiro run do CI; "continuar" inicia a Fase 2 no branch `fix/http-hardening`.
