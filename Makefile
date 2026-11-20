@@ -1,6 +1,6 @@
 # Atalhos para os comandos do projeto. O CI chama os comandos go diretamente.
 
-.PHONY: test lint build up migrate
+.PHONY: test lint build up migrate demo
 
 test: ## testes com race detector (integração só com TRACELOG_TEST_DATABASE_URL)
 	go test -race -count=1 ./...
@@ -18,3 +18,6 @@ up: ## banco, migrations, setup e API via docker compose
 
 migrate: ## aplica as migrations no banco do .env (CLI no host)
 	go run . migrate
+
+demo: ## sobe tudo, importa examples/logs, envia eventos e consulta (scripts/demo.sh)
+	./scripts/demo.sh
