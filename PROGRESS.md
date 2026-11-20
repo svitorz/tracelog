@@ -4,7 +4,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 
 ## Fase atual
 
-**Fase 2 (robustez da API HTTP) concluída** no branch `fix/http-hardening` (22 commits sobre `main`, incluindo este registro; sem push). Aguardando "continuar" para a Fase 3.
+**Fase 3 (container e migrations) concluída** no branch `feat/container`, criado a partir de `fix/http-hardening` (que está no GitHub, sem PR nem merge). Aguardando "continuar" para a Fase 4 e a decisão pendente 6.
 
 ## Checklist
 
@@ -12,20 +12,21 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 |------|--------|--------|
 | 0. Orientação | `chore/ci-baseline` | concluída |
 | 1. Rede de segurança e CI | `chore/ci-baseline` | concluída; PR #1 mergeado; CI verde no PR e no push para `main` |
-| 2. Robustez da API HTTP | `fix/http-hardening` | concluída (CI do branch só roda após push/PR) |
-| 3. Container e migrations | `feat/container` | pendente |
+| 2. Robustez da API HTTP | `fix/http-hardening` | concluída; push feito, sem PR (CI não rodou) |
+| 3. Container e migrations | `feat/container` | concluída (sem push; depende de `fix/http-hardening`) |
 | 4. Dados de exemplo e demo | `feat/sample-data` | pendente |
 | 5. Medição de banco (opcional) | — | só se pedido |
 | 6. Auditoria da documentação | `docs/audit` | pendente |
 | 7. Release v0.1.0 | `release/v0.1.0` | pendente |
 
-## Decisões pendentes (bloqueiam a Fase 1 ou a 2)
+## Decisões pendentes
 
 1. ~~**Licença.**~~ Decidido: GPL-3.0 (ver log de decisões).
 2. ~~**Spec 0001 x prompt.**~~ Decidido: só dedupe na v0.1.0 (ver log de decisões). Texto original: `docs/specs/0001-ingestao-em-lote-idempotente.md` (não commitada, marcada "Aprovada") já decide H4: unicidade `(application_id, external_id)`, duplicata responde `200` com `"duplicate": true`, `external_id` obrigatório no HTTP (400) e cria `POST /events/batch`. Isso conflita com "decida comigo 409 ou devolver existente", com H5 ("não perder evento": sem `external_id` decodificável a requisição viraria 400) e com o escopo enxuto da Fase 2.
 3. ~~**Arquivos não commitados.**~~ Decidido: commitados na Fase 1, um commit por arquivo lógico.
 4. ~~**Makefile.**~~ Decidido: criar na Fase 3 (ver log de decisões).
 5. ~~**Versão do Go.**~~ Decidido: 1.26.11 (ver log de decisões).
+6. **`pgcrypto` (H13).** Não removido: `000001` (já commitada, não pode ser editada) cria a extensão em todo banco novo; tirá-la exigiria `DROP EXTENSION IF EXISTS pgcrypto` numa `000004`, ou seja, criar e apagar em toda instalação, e é mudança destrutiva de schema (AGENTS.md pede confirmação). Desde o PostgreSQL 13 a `pgcrypto` é extensão *trusted*, então não exige superusuário. Recomendação: deixar e documentar como inofensiva. Na pergunta da fase 3 eu tinha dito que a removeria; revi ao implementar.
 
 ## Log de decisões
 
@@ -33,6 +34,18 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 |------|---------|--------|
 | 2026-11-20 | Licença GPL-3.0, não MIT. Na Fase 1, o item "adicionar LICENSE MIT" vira "commitar o `LICENSE` GPL-3.0 e o README já ajustados" | Decisão do autor; o working tree e o `AGENTS.md` já estavam em GPL-3.0 |
 | 2026-11-20 | Spec 0001 na v0.1.0: só a parte de duplicidade. Unicidade `(application_id, external_id) WHERE external_id IS NOT NULL` por migration nova; duplicata responde `200` com `"duplicate": true` e o evento existente. Ficam para depois da v0.1.0: `external_id` obrigatório (D5) e `POST /events/batch` (D3). A spec será atualizada na Fase 2 para registrar o recorte | Mantém a Fase 2 pequena e preserva a política de ingestão tolerante (H5): sem `external_id`, o evento continua sendo gravado. Descartado: 409, que obrigaria o cliente a tratar erro num reenvio que deu certo |
+| 2026-11-20 | Fase 3 guiada pela spec 0003 (`docs/specs/0003-container-e-migrations.md`) | Novo comando, nova flag, nova tabela e compose mudam contrato |
+| 2026-11-20 | Migrations: `tracelog migrate` com `go:embed` + `schema_migrations` + `pg_advisory_lock` | Sem dependência nova, funciona em container e CI. Descartados: goose/golang-migrate (dependência e peso), serviço psql (só resolve o compose) |
+| 2026-11-20 | Migrator no adapter de repositório, sem port/serviço | Migração é infraestrutura, não regra de negócio; um port só para isso seria camada a mais. SQL continua só no adapter |
+| 2026-11-20 | Cada arquivo roda com a própria transação, registro logo depois (não atômico) | As migrations commitadas têm `BEGIN`/`COMMIT` e não podem ser editadas; embrulhá-las em outra transação faria o `COMMIT` interno encerrar a externa. Custo: morte entre aplicar e registrar reaplica o arquivo, coberto pela regra de idempotência |
+| 2026-11-20 | Orquestração: serviços one-shot `migrate` → `init` → `api` com `service_completed_successfully` | Passos visíveis e com falha isolada. Descartado: entrypoint único |
+| 2026-11-20 | `init --defaults` (uma flag) | Contrato mínimo. Descartado: 9 flags, uma por campo |
+| 2026-11-20 | Runtime `alpine:3.24` + `wget` no healthcheck, UID 10001 | Sem código novo para healthcheck. Descartado: distroless + subcomando `healthcheck` |
+| 2026-11-20 | Imagens fixadas: `golang:1.26.11-alpine3.24`, `alpine:3.24`, `postgres:16.16-alpine` | Build reproduzível; tags conferidas na API do Docker Hub |
+| 2026-11-20 | Portas só em `127.0.0.1`; `DB_HOST`/`DB_PORT` do container por `environment:`; sem `env_file` | H11: a app no container não herda `DB_HOST=localhost`; só as variáveis necessárias entram no container |
+| 2026-11-20 | Removido `container_name: tracelog-postgres` | Permite mais de um projeto compose na mesma máquina (usado no teste com `-p tracelog-phase3`) |
+| 2026-11-20 | `scripts/run-migrations.sh` removido (confirmado na escolha da opção); docs passam a citar `tracelog migrate` | Duas formas de migrar divergiriam |
+| 2026-11-20 | CI ganhou job `docker build` + checagem de UID | Dockerfile quebrado seria descoberto só pelo usuário |
 | 2026-11-20 | Fase 2 guiada pela spec 0002 (`docs/specs/0002-endurecimento-da-api-http.md`), escrita antes do código | `AGENTS.md` exige spec para mudança de contrato (rotas, status, config, schema, saída da CLI) |
 | 2026-11-20 | H7: palavra inteira + flexões + CamelCase `*Error`/`*Exception` | Remove falsos positivos de substring ("terror", "crashpad"); negação continua não tratada e está documentada em teste. Descartado: manter substring |
 | 2026-11-20 | H8: colunas `ERRORS`, `FATAL`, `TOTAL`; dia em UTC | Nada some e a distinção fica visível. Descartado: somar fatal em uma coluna; manter só error |
@@ -78,6 +91,29 @@ Limitação: as provas HTTP foram feitas com `curl` contra o binário real, não
 | `LICENSE` | idêntico byte a byte a `/usr/share/common-licenses/GPL-3` |
 
 Limitação: o workflow só roda de verdade no GitHub depois do push.
+
+## Medições (Fase 3)
+
+Projeto compose separado (`-p tracelog-phase3`, `--env-file` em scratch com `DB_PORT=55434` e `HTTP_PORT=18082`, porque a 5432 local é de outro projeto). Nenhum `.env` do repositório foi criado ou lido.
+
+| Verificação (spec 0003 §7) | Resultado medido |
+|-----------------------------|------------------|
+| Build da imagem (cache frio de camadas do projeto, imagens base já baixadas) | ~41s; `tracelog:local` = 31,3 MB |
+| 1. `up -d` com volume vazio | `migrate` e `init` exit 0; `api` healthy em 32s (primeira vez) |
+| 2. `up -d` de novo | `api` healthy em 1s; `migrate`: "database is up to date (3 migrations)"; `init`: mesmo application ID |
+| 3. `tracelog migrate` duas vezes (CLI no host) | aplica 3, depois nada |
+| 4. Banco migrado pelos `.sql` crus | teste de integração `MigrateAdoptsDatabaseFromOldScript` passa |
+| 5. `init --defaults` | não lê stdin (teste com reader que falha); IDs iguais em duas execuções (CLI e teste de integração) |
+| 6. Usuário do processo | `uid=10001(tracelog)` (`docker exec ... id` e `docker top`) |
+| 7. `down -v` + `up -d` (confirmado pelo autor) | volume removido; tudo recriado, `api` healthy em 13s, 0 eventos |
+| `docker compose stop api` | exit 0, log `[serve] Shutdown complete` |
+| Portas | `ss -ltn`: `127.0.0.1:18082` e `127.0.0.1:55434` |
+| Compose sem variáveis | erro de interpolação `defina DB_NAME no .env (copie o .env.example)` |
+| `make lint`, `make test`, `make build`, `make migrate` | ok; `make up` sem `.env` falha com instrução |
+
+Limitações: a primeira subida (32s) é dominada pelos intervalos dos healthchecks (5s no Postgres, 10s na API), não pelo trabalho; não medi em máquina limpa sem as imagens base em cache.
+
+Sobra do teste: o volume `tracelog-phase3_tracelog_postgres_data` (1 evento de teste) ficou na máquina; containers e rede foram removidos. Para apagá-lo: `docker volume rm tracelog-phase3_tracelog_postgres_data`.
 
 ## Medições (Fase 2)
 
@@ -153,4 +189,4 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 
 ## Próximo passo
 
-Push de `fix/http-hardening`, PR e conferir o CI (agora com PostgreSQL de serviço). "continuar" inicia a Fase 3 (`feat/container`), que começa com a decisão sobre migrations (`tracelog migrate` embutido x goose/golang-migrate x serviço psql) e setup não interativo.
+Decidir o `pgcrypto` (pendente 6). Abrir PR de `fix/http-hardening` (e depois de `feat/container`) para o CI rodar. "continuar" inicia a Fase 4 (`feat/sample-data`): dataset em `examples/logs/` (atenção ao `*.log` do `.gitignore`), gerador determinístico, decisão sobre `seed`, relatório de erros do import e `scripts/demo.sh` + alvo `make demo`.
