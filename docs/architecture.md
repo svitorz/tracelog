@@ -212,7 +212,6 @@ Concrete implementations of ports:
 - Query events with filters (`events list`)
 - Display error metrics (`metrics errors`)
 - Manage database entities (`db list`)
-- Seed bootstrap data (`seed`)
 
 **Implementation**: Cobra framework for command parsing and help text
 

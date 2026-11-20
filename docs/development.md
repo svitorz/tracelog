@@ -203,8 +203,7 @@ tracelog/
 │   ├── serve.go                  # HTTP server command
 │   ├── events.go                 # Event query commands
 │   ├── metrics.go                # Metrics commands
-│   ├── db.go                     # Database inspection commands
-│   └── seed.go                   # Data seeding command
+│   └── db.go                     # Database inspection commands
 │
 ├── internal/                     # Private application code
 │   ├── adapters/                 # External interface implementations

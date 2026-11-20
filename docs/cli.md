@@ -451,74 +451,6 @@ tracelog events list --application-id $APP_ID --severity error
 
 ---
 
-### seed
-
-Bootstrap the database with default reference data.
-
-**Usage**:
-```bash
-tracelog seed
-```
-
-**Description**:
-
-Populates the database with default entities required for basic operation. This command is **idempotent** and can be run multiple times safely. It uses `ON CONFLICT DO NOTHING` to avoid duplicates.
-
-**What Gets Seeded**:
-
-1. **Environments**:
-   - `local`: Local development environment
-   - `dev`: Shared development environment
-   - `staging`: Pre-production environment
-   - `prod`: Production environment
-
-2. **Monitored Applications** (examples):
-   - Sample applications for testing
-   - Can be customized via migration or direct SQL
-
-3. **Event Sources** (examples):
-   - `api`: REST API endpoints
-   - `worker`: Background job processors
-   - `scheduler`: Scheduled tasks
-   - `consumer`: Message queue consumers
-
-**Examples**:
-
-```bash
-# First-time database setup
-tracelog migrate
-tracelog seed
-
-# Re-seed after database changes (safe)
-tracelog seed
-
-# Verify seeded data
-tracelog db list environments
-tracelog db list applications
-tracelog db list sources
-```
-
-**Output**:
-
-```
-[seed] Connecting to PostgreSQL...
-[seed] Seeding default data...
-[seed] ✓ Environments: 4 inserted
-[seed] ✓ Applications: 3 inserted
-[seed] ✓ Event sources: 4 inserted
-[seed] Bootstrap complete!
-```
-
-**Use Cases**:
-- Initial project setup
-- Reset reference data to defaults
-- Add missing default entities after manual deletions
-- Setup test databases
-
-**Note**: This command does NOT seed technical events, only reference data.
-
----
-
 ## Common Workflows
 
 ### Initial Setup
@@ -530,8 +462,8 @@ docker compose up -d
 # 2. Run migrations
 tracelog migrate
 
-# 3. Seed reference data
-tracelog seed
+# 3. Create the default application, environment and source
+tracelog init --defaults
 
 # 4. Verify setup
 tracelog db list environments

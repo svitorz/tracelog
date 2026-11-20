@@ -109,12 +109,10 @@ A camada de repositório hoje é específica de PostgreSQL (`JSONB`, `gen_random
 
 Lista completa e atualizada em `docs/guia-do-projeto.md`, seções 11 e 13. Resumo dos mais importantes:
 
-- `external_id` duplicado retorna `500` (ver spec de ingestão em lote).
-- Sem limite de tamanho de corpo no HTTP.
-- Sem graceful shutdown.
+- Sem autenticação, TLS nem rate limit (fora do MVP; ver spec 0003, seção 5).
+- Heurística de severidade não entende negação ("0 errors found" é `error`).
 - Importação de arquivos faz um `INSERT` por linha, sem lote.
-- `metrics errors` ignora `fatal`.
-- `seed` é no-op.
+- `POST /events/batch` e `external_id` obrigatório (spec 0001, D3/D5) adiados para depois da v0.1.0.
 
 ## 12. O que pedir confirmação antes de fazer
 

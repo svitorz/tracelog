@@ -45,7 +45,7 @@ Histórico resumido. Os commits completos estão em `git log`.
 - **`severity` não é aceito do cliente no HTTP.** Ela é derivada pelo servidor (ver seção 7.3).
 - **Ingestão tolerante.** O HTTP só responde erro quando não consegue persistir nada. Dados incompletos são gravados com anotações.
 - **`serve` exige setup.** Se `tracelog init` não foi executado, o servidor não sobe.
-- **`seed` é um no-op.** Ele apenas imprime uma mensagem. Os dados de referência vêm do `init`.
+- **Não há `seed`.** O comando foi removido (spec 0004): os dados de referência vêm do `init` e os dados de demonstração de `examples/logs/` (seção 6.3).
 
 ---
 
@@ -348,7 +348,6 @@ Com o binário compilado, substitua `go run .` por `tracelog`.
 | `metrics errors` | Contagem de `error` e `fatal` por dia (UTC) | `--application-id`, `--environment-id`, `--from`, `--to` |
 | `db list environments\|applications\|sources` | Lista entidades de referência com IDs | — |
 | `import logs` | Importa arquivos de log | `--file` (obrigatório, repetível) |
-| `seed` | **No-op** (apenas imprime mensagem) | — |
 
 Formatos de data em `--from`/`--to`: RFC3339 (`2026-03-09T14:30:00Z`, usado como está) ou `2026-03-09`. Só a data em `--from` vale 00:00 UTC; em `--to` vale o dia inteiro (até 23:59:59.999999999 UTC).
 
@@ -495,7 +494,7 @@ tracelog/
 ├── main.go                       # entrada: chama cmd.Execute()
 ├── cmd/                          # adapters de CLI (Cobra)
 │   ├── root.go                   # carrega config antes de qualquer comando
-│   ├── init.go  serve.go  seed.go
+│   ├── init.go  serve.go  migrate.go
 │   ├── events.go  metrics.go  db.go  import.go
 ├── internal/
 │   ├── config/config.go          # .env + variáveis de ambiente, validação
@@ -536,7 +535,6 @@ Dependências diretas (`go.mod`): `github.com/jackc/pgx/v5` e `github.com/spf13/
 3. **Sem validação de `message`** no HTTP: qualquer valor é aceito e normalizado.
 4. **Sem autenticação, rate limiting ou versionamento** de API (`/v1`). Documentado como futuro.
 5. **Heurística de severidade** não entende negação (seção 7.3).
-6. **`seed` não popula nada.**
 7. **`--help` exige `.env` válido.**
 8. O CI (`.github/workflows/ci.yml`) roda gofmt, `go vet`, `go test -race` com PostgreSQL e build, além de um job que constrói a imagem Docker e confere que ela não roda como root.
 
@@ -552,7 +550,6 @@ Os arquivos abaixo ainda descrevem comportamentos que não existem. Corrija-os a
 | `docs/development.md` | Go 1.21+ | `go.mod` declara 1.26.11 |
 | `docs/http-api.md`, `docs/development.md` | `severity` obrigatório/enviado no `POST /events` | Ignorado; severidade é derivada |
 | `docs/http-api.md` | `400` para campos ausentes, `message is required`, JSON inválido | Não existe; dados são normalizados e gravados com `201` |
-| `docs/cli.md`, `docs/getting-started.md` | `seed` popula ambientes, apps e fontes | `seed` só imprime mensagem |
 | `docs/architecture.md`, `docs/domain.md` | Tabelas `technical_events`, `monitored_applications`, `environments`, `event_sources` | Nomes reais: `technical_event`, `monitored_application`, `environment`, `event_source` |
 | `docs/development.md` | Migration `000002_bootstrap_data.sql`; seeds nas migrations | Não existe; a `000002` é `add_log_import_fields`; seeds removidos (`484fea9`) |
 | `docs/development.md` | `scripts/setup-demo-data.sh`, `scripts/seed-error-data.sh` | Não existem |
