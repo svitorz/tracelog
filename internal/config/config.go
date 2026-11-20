@@ -46,17 +46,25 @@ type DBConfig struct {
 	SSLMode  string
 }
 
-// DSN monta a string de conexão PostgreSQL para uso em adapters.
+// DSN monta a string de conexão PostgreSQL para uso em adapters. Os valores vão entre
+// aspas simples, com \ e ' escapados (regra do libpq), para que uma senha com espaço
+// ou aspas não quebre a string.
 func (d DBConfig) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%d dbname=%s user=%s password=%s sslmode=%s",
-		d.Host,
+		quoteDSNValue(d.Host),
 		d.Port,
-		d.Name,
-		d.User,
-		d.Password,
-		d.SSLMode,
+		quoteDSNValue(d.Name),
+		quoteDSNValue(d.User),
+		quoteDSNValue(d.Password),
+		quoteDSNValue(d.SSLMode),
 	)
+}
+
+var dsnValueEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+
+func quoteDSNValue(value string) string {
+	return "'" + dsnValueEscaper.Replace(value) + "'"
 }
 
 // Load carrega configuração via ambiente e aplica defaults.

@@ -2,6 +2,8 @@ package config
 
 import (
 	"os"
+
+	"github.com/jackc/pgx/v5/pgconn"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -168,5 +170,21 @@ func writeFile(t *testing.T, path, contents string) {
 
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	}
+}
+
+func TestDSNQuotesSpecialCharacters(t *testing.T) {
+	cfg := DBConfig{Host: "db.local", Port: 5432, Name: "trace log", User: "o'neil", Password: `a b'c\d`, SSLMode: "disable"}
+
+	parsed, err := pgconn.ParseConfig(cfg.DSN())
+	if err != nil {
+		t.Fatalf("ParseConfig(DSN()) error = %v", err)
+	}
+
+	if parsed.Password != `a b'c\d` {
+		t.Fatalf("Password = %q, want %q", parsed.Password, `a b'c\d`)
+	}
+	if parsed.User != "o'neil" || parsed.Database != "trace log" || parsed.Host != "db.local" || parsed.Port != 5432 {
+		t.Fatalf("parsed = user %q db %q host %q port %d, want the configured values", parsed.User, parsed.Database, parsed.Host, parsed.Port)
 	}
 }
