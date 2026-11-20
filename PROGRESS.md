@@ -4,7 +4,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 
 ## Fase atual
 
-**Fase 2 (robustez da API HTTP) concluída** no branch `fix/http-hardening` (21 commits sobre `main`, sem push). Aguardando "continuar" para a Fase 3.
+**Fase 2 (robustez da API HTTP) concluída** no branch `fix/http-hardening` (22 commits sobre `main`, incluindo este registro; sem push). Aguardando "continuar" para a Fase 3.
 
 ## Checklist
 
