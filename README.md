@@ -191,6 +191,7 @@ Important current behaviors:
 
 ## Additional Documentation
 
+- [Guia do Projeto (estado atual, instalação, build, testes)](./docs/guia-do-projeto.md)
 - [Getting Started](./docs/getting-started.md)
 - [HTTP API](./docs/http-api.md)
 - [CLI Reference](./docs/cli.md)
