@@ -75,6 +75,11 @@ Ordem nova (a primeira que casar vence), com **palavras inteiras**, como a sever
 3. `system`: `database`, `disk`, `memory`, `cpu`, `network`, `timeout(s)`, `connection(s)`, `postgres`, `redis`, `kafka`.
 4. Demais regras inalteradas.
 
+### 4.4.1 Parser e status (decididos ao gerar o dataset)
+
+- Linha que começa com `[` só vai para o parser JSON se for JSON válido. Assim `[06/Mar/2026:02:26:01 +0000] WARN ...` chega ao parser `timestamp nível mensagem` (que guarda o nível e registra o timestamp ilegível em `parse_error`), em vez de virar texto puro.
+- O categorizador não promove mais `partial` para `normalized`. `normalized` significa que timestamp, mensagem e categoria foram reconhecidos; uma linha sem timestamp utilizável continua `partial`, mesmo com categoria.
+
 ### 4.5 `seed`
 
 O comando `tracelog seed` e sua documentação são removidos. Dados de demonstração vêm de `examples/logs/` via `import logs` (ou `make demo`).
