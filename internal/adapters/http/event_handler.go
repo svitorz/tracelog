@@ -83,7 +83,7 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
 	defer cancel()
 
-	event, err := h.registerUseCase.Execute(ctx, input)
+	result, err := h.registerUseCase.Execute(ctx, input)
 	if err != nil {
 		// The error may carry SQL and constraint details: log it, never send it to the client.
 		h.logger.ErrorContext(r.Context(), "failed to register event",
@@ -94,14 +94,22 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	event := result.Event
 	response := RegisterEventResponse{
 		ID:         event.ID,
 		ExternalID: event.ExternalID,
 		ReceivedAt: event.ReceivedAt,
 		CreatedAt:  event.CreatedAt,
+		Duplicate:  result.Duplicate,
 	}
 
-	respondJSON(w, http.StatusCreated, response)
+	// A resend of an event already stored is a success, not a conflict (spec 0001 D2).
+	status := http.StatusCreated
+	if result.Duplicate {
+		status = http.StatusOK
+	}
+
+	respondJSON(w, status, response)
 }
 
 // isJSONMediaType accepts application/json and structured syntax suffixes such as

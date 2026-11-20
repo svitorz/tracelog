@@ -95,7 +95,7 @@ func TestRegisterTechnicalEventUsesImportedLevelForSeverity(t *testing.T) {
 	repo := &stubTechnicalEventRepository{}
 	uc := NewRegisterTechnicalEventUseCase(repo)
 
-	event, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+	result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
 		OccurredAt:          "2026-03-09T12:00:00Z",
 		Message:             "worker completed",
 		Payload:             map[string]any{"level": "debug"},
@@ -109,8 +109,8 @@ func TestRegisterTechnicalEventUsesImportedLevelForSeverity(t *testing.T) {
 		t.Fatalf("Execute() unexpected error = %v", err)
 	}
 
-	if event.Severity != domain.SeverityDebug {
-		t.Fatalf("Severity = %q, want %q", event.Severity, domain.SeverityDebug)
+	if result.Event.Severity != domain.SeverityDebug {
+		t.Fatalf("Severity = %q, want %q", result.Event.Severity, domain.SeverityDebug)
 	}
 }
 

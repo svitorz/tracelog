@@ -32,20 +32,36 @@ type fakeEventRepository struct {
 	saved   []domain.TechnicalEvent
 	lastCtx context.Context
 	saveErr error
+	// knownApps, when non-nil, lists the application IDs that exist.
+	knownApps map[string]bool
 }
 
-func (r *fakeEventRepository) Save(ctx context.Context, event *domain.TechnicalEvent) error {
+// Save mimics the PostgreSQL adapter: FK check on application_id against knownApps
+// (when set) and deduplication by (application_id, external_id).
+func (r *fakeEventRepository) Save(ctx context.Context, event *domain.TechnicalEvent) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.lastCtx = ctx
 	if r.saveErr != nil {
-		return r.saveErr
+		return false, r.saveErr
+	}
+	if r.knownApps != nil && !r.knownApps[event.ApplicationID] {
+		return false, fmt.Errorf("%w: application_id", ports.ErrReferenceNotFound)
+	}
+
+	if event.ExternalID != "" {
+		for _, stored := range r.saved {
+			if stored.ApplicationID == event.ApplicationID && stored.ExternalID == event.ExternalID {
+				*event = stored
+				return false, nil
+			}
+		}
 	}
 
 	event.ID = fmt.Sprintf("event-%d", len(r.saved)+1)
 	r.saved = append(r.saved, *event)
-	return nil
+	return true, nil
 }
 
 func (r *fakeEventRepository) FindByFilters(context.Context, ports.TechnicalEventFilters) ([]domain.TechnicalEvent, error) {
@@ -243,5 +259,54 @@ func TestRegisterEventHidesInternalErrors(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "SQLSTATE 42P01") {
 		t.Fatalf("server log = %q, want the internal error detail", logs.String())
+	}
+}
+
+func TestRegisterEventIsIdempotentPerApplication(t *testing.T) {
+	const otherAppID = "550e8400-e29b-41d4-a716-446655440099"
+	repo := &fakeEventRepository{}
+	h := newTestServer(t, repo, 1<<20)
+
+	body := func(app string) string {
+		return `{"external_id":"order-42","message":"x","application_id":"` + app + `"}`
+	}
+
+	first := postEvent(t, h, body(testAppID), nil)
+	second := postEvent(t, h, body(testAppID), nil)
+	otherApp := postEvent(t, h, body(otherAppID), nil)
+
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first status = %d, want 201", first.Code)
+	}
+	if second.Code != http.StatusOK {
+		t.Fatalf("resend status = %d, want 200", second.Code)
+	}
+	if otherApp.Code != http.StatusCreated {
+		t.Fatalf("other application status = %d, want 201", otherApp.Code)
+	}
+
+	firstBody, secondBody := decodeBody(t, first), decodeBody(t, second)
+	if secondBody["duplicate"] != true || firstBody["duplicate"] != false {
+		t.Fatalf("duplicate flags = %v then %v, want false then true", firstBody["duplicate"], secondBody["duplicate"])
+	}
+	if secondBody["id"] != firstBody["id"] {
+		t.Fatalf("resend id = %v, want the original %v", secondBody["id"], firstBody["id"])
+	}
+	if repo.count() != 2 {
+		t.Fatalf("stored events = %d, want 2 (one per application)", repo.count())
+	}
+}
+
+func TestRegisterEventFallsBackWhenApplicationDoesNotExist(t *testing.T) {
+	repo := &fakeEventRepository{knownApps: map[string]bool{testAppID: true}}
+	h := newTestServer(t, repo, 1<<20)
+
+	rec := postEvent(t, h, `{"message":"x","application_id":"11111111-1111-4111-8111-111111111111"}`, nil)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 after fallback (body %q)", rec.Code, rec.Body.String())
+	}
+	if got := repo.saved[0].ApplicationID; got != testAppID {
+		t.Fatalf("stored application_id = %q, want fallback %q", got, testAppID)
 	}
 }

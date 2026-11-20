@@ -33,6 +33,14 @@ type RegisterTechnicalEventInput struct {
 	DecodeError         string
 }
 
+// RegisterTechnicalEventResult is the outcome of a registration.
+type RegisterTechnicalEventResult struct {
+	Event *domain.TechnicalEvent
+	// Duplicate is true when an event with the same (application_id, external_id)
+	// already existed; Event is then the stored one and nothing was written.
+	Duplicate bool
+}
+
 // RegisterTechnicalEventUseCase validates, enriches and persists a technical event.
 type RegisterTechnicalEventUseCase struct {
 	repo      ports.TechnicalEventRepository
@@ -53,7 +61,7 @@ func NewRegisterTechnicalEventUseCase(repo ports.TechnicalEventRepository, setup
 	}
 }
 
-func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input RegisterTechnicalEventInput) (*domain.TechnicalEvent, error) {
+func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input RegisterTechnicalEventInput) (*RegisterTechnicalEventResult, error) {
 	if uc == nil || uc.repo == nil {
 		return nil, fmt.Errorf("technical event repository is required")
 	}
@@ -112,28 +120,24 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 		EnvironmentID:       environmentID,
 	}
 
-	if err := uc.repo.Save(ctx, event); err != nil {
-		if shouldRetryWithFallback(err) {
-			recovered, recoveryErr := uc.loadFallbackSetup(ctx)
-			if recoveryErr == nil {
-				retryNotes := applyFallbackSetup(event, recovered)
-				if len(retryNotes) > 0 {
-					notes = append(notes, retryNotes...)
-					enrichPayload(event.Payload, input.RawRequestBody, input.OccurredAt, input.DecodeError, notes)
-				}
-
-				if retryErr := uc.repo.Save(ctx, event); retryErr == nil {
-					return event, nil
-				} else {
-					err = retryErr
-				}
+	created, err := uc.repo.Save(ctx, event)
+	if err != nil && shouldRetryWithFallback(err) {
+		recovered, recoveryErr := uc.loadFallbackSetup(ctx)
+		if recoveryErr == nil {
+			retryNotes := applyFallbackSetup(event, recovered)
+			if len(retryNotes) > 0 {
+				notes = append(notes, retryNotes...)
+				enrichPayload(event.Payload, input.RawRequestBody, input.OccurredAt, input.DecodeError, notes)
 			}
-		}
 
+			created, err = uc.repo.Save(ctx, event)
+		}
+	}
+	if err != nil {
 		return nil, fmt.Errorf("failed to register technical event: %w", err)
 	}
 
-	return event, nil
+	return &RegisterTechnicalEventResult{Event: event, Duplicate: !created}, nil
 }
 
 func validateRegisterTechnicalEventInput(input RegisterTechnicalEventInput) error {

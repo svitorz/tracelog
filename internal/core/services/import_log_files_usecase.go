@@ -110,7 +110,7 @@ func (uc *ImportLogFilesUseCase) importFile(ctx context.Context, reader io.Reade
 		parsed.Payload = enrichImportedPayload(parsed.Payload, path, lineNumber, parsed.Format, parsed.Parser)
 		category, status := uc.categorizer.Categorize(parsed)
 
-		event, err := uc.registerUC.Execute(ctx, RegisterTechnicalEventInput{
+		registered, err := uc.registerUC.Execute(ctx, RegisterTechnicalEventInput{
 			OccurredAt:          parsed.OccurredAt,
 			Message:             parsed.Message,
 			Category:            category,
@@ -131,7 +131,7 @@ func (uc *ImportLogFilesUseCase) importFile(ctx context.Context, reader io.Reade
 		}
 
 		result.Persisted++
-		switch event.NormalizationStatus {
+		switch registered.Event.NormalizationStatus {
 		case domain.NormalizationStatusNormalized:
 			result.Normalized++
 		case domain.NormalizationStatusPartial:
