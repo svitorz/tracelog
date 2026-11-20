@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"unicode/utf8"
 	"time"
+	"unicode/utf8"
 
 	"svitorz/tracelog/internal/core/domain"
 	"svitorz/tracelog/internal/core/ports"
