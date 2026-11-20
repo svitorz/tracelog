@@ -25,7 +25,7 @@ The current MVP does not provide dashboards, background consumers, alerting, or 
 
 TraceLog must be initialized before it can receive events. The `serve` command checks for the minimum system setup and fails if `tracelog init` has not been executed successfully.
 
-For a complete step-by-step guide, see [docs/getting-started.md](/home/svitorz/dev/tracelog/docs/getting-started.md).
+For a complete step-by-step guide, see [docs/getting-started.md](./docs/getting-started.md).
 
 ### 1. Clone the repository
 
@@ -191,6 +191,7 @@ Important current behaviors:
 
 ## Additional Documentation
 
+- [Guia do Projeto (estado atual, instalação, build, testes)](./docs/guia-do-projeto.md)
 - [Getting Started](./docs/getting-started.md)
 - [HTTP API](./docs/http-api.md)
 - [CLI Reference](./docs/cli.md)
@@ -200,4 +201,6 @@ Important current behaviors:
 
 ## License
 
-MIT License
+TraceLog is free software licensed under the [GNU General Public License v3.0](./LICENSE).
+
+Copyright (C) 2026 Vitor Fábio. See [LICENSE](./LICENSE) for the full terms.
