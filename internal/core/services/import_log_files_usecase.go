@@ -268,9 +268,15 @@ type jsonLogLineParser struct{}
 
 func (jsonLogLineParser) Name() string { return "json" }
 
+// Detect claims lines starting with "{" (even if broken, to keep the JSON parse error) and
+// lines starting with "[" only when they are valid JSON: "[06/Mar/2026:...] WARN ..." is a
+// bracketed timestamp, not a JSON array (spec 0004).
 func (jsonLogLineParser) Detect(rawLine string) bool {
 	trimmed := strings.TrimSpace(rawLine)
-	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
+	if strings.HasPrefix(trimmed, "{") {
+		return true
+	}
+	return strings.HasPrefix(trimmed, "[") && json.Valid([]byte(trimmed))
 }
 
 func (jsonLogLineParser) Parse(rawLine string, now time.Time) parsedLogLine {
