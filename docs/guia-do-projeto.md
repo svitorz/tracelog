@@ -2,7 +2,7 @@
 
 Documento de referência para retomar o desenvolvimento do TraceLog. Descreve o estado atual do código, como instalar, compilar, executar e testar, e o que ainda precisa de atenção.
 
-> Este guia foi escrito a partir do código no commit `456c830` e atualizado com as mudanças da spec 0002 (fase 2, 2026-11-20). Quando algo aqui divergir do código, o código prevalece. As divergências conhecidas com os outros documentos de `docs/` estão listadas na seção [Divergências conhecidas](#divergências-conhecidas-na-documentação).
+> Este guia foi escrito a partir do código no commit `456c830` e atualizado com as mudanças das specs 0002, 0003 e 0004 (fases 2 a 4, 2026-11-20). Quando algo aqui divergir do código, o código prevalece. As divergências conhecidas com os outros documentos de `docs/` estão listadas na seção [Divergências conhecidas](#divergências-conhecidas-na-documentação).
 
 ---
 
@@ -101,7 +101,7 @@ DB_SSLMODE=disable
 | `DB_PORT` | não | `5432` | Porta do PostgreSQL; também é a porta publicada pelo Docker. |
 | `DB_NAME` | **sim** | — | Nome do banco. |
 | `DB_USER` | **sim** | — | Usuário do banco. |
-| `DB_PASSWORD` | **sim** | — | Senha do banco. |
+| `DB_PASSWORD` | **sim** | — | Senha do banco. Pode ter espaços e aspas (o DSN escapa os valores). |
 | `DB_SSLMODE` | não | `disable` | Um de `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full`. |
 
 **Precedência:** variável de ambiente do shell > `.env`. Um `.env` nunca sobrescreve uma variável já definida.
@@ -367,27 +367,44 @@ go run . import logs --file ./app.log
 go run . import logs --file ./app.log --file ./worker.log
 ```
 
-Cada linha é tratada por um parser, na ordem:
+Cada linha não vazia é tratada por um parser, na ordem:
 
-1. **JSON** (linha começa com `{` ou `[`). Extrai `message`/`msg`/`error`, `trace_id`, `correlation_id`/`request_id`, `level`, `timestamp`/`ts`, etc. JSON inválido → `partial` com `parse_error`.
-2. **`timestamp level message`** (ex.: `2026-03-09T14:30:00Z ERROR falha de conexão`). Timestamp inválido → `partial`.
-3. **Texto puro** (fallback). Linha vazia → `uncategorizable`.
+1. **JSON**: linha que começa com `{`, ou com `[` e é JSON válido. Extrai `message`/`msg`/`error`, `trace_id`, `correlation_id`/`request_id`, `level`, `timestamp`/`ts`, etc. JSON quebrado → `partial` com `parse_error`.
+2. **`timestamp nível mensagem`** (ex.: `2026-03-09T14:30:00Z ERROR falha de conexão`, ou `[06/Mar/2026:02:26:01 +0000] WARN ...`). Timestamp ilegível → `partial` com `parse_error`, e `occurred_at` vira a hora da importação.
+3. **Texto puro** (fallback): `partial`, sem timestamp.
 
-A categoria é inferida por palavras-chave na mensagem (ex.: `login`/`auth` → `audit`; `denied`/`token` → `security`; `database`/`timeout`/`connection` → `system`). Se nada casar, vira `unknown`.
+Linhas vazias ou só com espaços são puladas e contadas em `Blank lines skipped`.
 
-Saída:
+A categoria é inferida por palavras inteiras da mensagem, nesta ordem: sinais de segurança (`unauthorized`, `forbidden`, `denied`, `token`, ou `login`/`auth` junto com `failed`/`invalid`/`locked`...) → `security`; `login`, `logout`, `permission`, `created by`... → `audit`; `database`, `timeout`, `connection`... → `system`; outros formatos estruturados → `application`; senão `unknown`. A categoria não muda o status: `normalized` só quando timestamp e mensagem foram lidos (spec 0004).
+
+**Reimportação:** cada linha recebe `external_id = file:` + 32 caracteres de `sha256(nome do arquivo, número da linha, conteúdo)`. Reimportar o mesmo arquivo, de qualquer diretório, não grava nada de novo; o resumo mostra `Duplicates`. Mesmo nome, linha e conteúdo em arquivos diferentes contam como o mesmo evento.
+
+**Desempenho:** a conexão do import usa `synchronous_commit=off`. Medido nesta máquina (i5-1135G7, PostgreSQL 16 em Docker): 80.266 linhas em 34s (eram 334s com commit síncrono). Se o PostgreSQL cair no meio, os commits dos últimos ~0,6s podem se perder, sem corromper nada; basta reimportar. O `serve` continua síncrono.
+
+Saída real com os arquivos de `examples/logs/` num banco vazio:
 
 ```text
 Log import summary
-Files processed: 2
-Lines read: 482
-Persisted: 482
-Normalized: 301
-Partially interpreted: 143
-Uncategorizable: 38
+Files processed: 3
+Lines read: 434
+Persisted: 429
+Duplicates (already imported): 0
+Blank lines skipped: 5
+Normalized: 378
+Partially interpreted: 20
+Uncategorizable: 31
 ```
 
+Erros de gravação aparecem como `Persistence errors: N`, seguidos de até 10 linhas `arquivo:linha: motivo`.
+
 Cada evento importado recebe `ingestion_channel=file`, `raw_line`, `normalization_status`, `parse_error` e `payload._ingestion` (arquivo, linha, formato, parser).
+
+### 6.4 Dados de exemplo e demonstração
+
+- `examples/logs/`: 434 linhas sintéticas de 2026-03-01 a 2026-03-14 de uma aplicação fictícia (`checkout-api`), em três formatos: `checkout-api.log` (JSON), `auth-service.log` (`timestamp nível mensagem`) e `legacy-gateway.log` (texto livre). Há um pico de erros em 2026-03-10 (banco fora por 90 minutos, com um `fatal`), falhas de login em massa em 2026-03-06, linhas cortadas, sem timestamp e em branco. Usuários `user-NNNN` e IPs só das faixas de documentação (RFC 5737).
+- `tools/loggen`: o gerador desses arquivos, com semente fixa. `go run ./tools/loggen -out examples/logs` reproduz exatamente os arquivos versionados (há teste para isso); `-scale N -out <dir>` gera volumes maiores, que não devem ser versionados.
+- `make demo` (ou `./scripts/demo.sh`): sobe o compose, importa os exemplos com a CLI dentro do container, envia eventos por `curl` e roda `events list` e `metrics errors`. Exige só Docker e `curl`. A saída real de uma execução com volume vazio está em [`docs/demo-output.txt`](./demo-output.txt).
+- `docs/demo.tape`: roteiro do [VHS](https://github.com/charmbracelet/vhs) para gravar `docs/demo.gif` (`vhs docs/demo.tape`, com o stack no ar).
 
 ---
 
@@ -574,4 +591,4 @@ Itens não implementados ou que merecem decisão antes de avançar:
 
 ---
 
-**Última atualização deste guia:** fase 2, spec 0002 (2026-11-20).
+**Última atualização deste guia:** fase 4, spec 0004 (2026-11-20).
