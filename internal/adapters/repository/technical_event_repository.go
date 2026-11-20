@@ -111,11 +111,7 @@ func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *doma
 		event.SourceID,
 		event.EnvironmentID,
 	).Scan(&event.ID, &event.ReceivedAt, &event.CreatedAt); err != nil {
-		if message := friendlyForeignKeyError(err); message != "" {
-			return fmt.Errorf("failed to save technical event: %s", message)
-		}
-
-		return fmt.Errorf("failed to save technical event: %w", err)
+		return fmt.Errorf("failed to save technical event: %w", mapSaveError(err))
 	}
 
 	event.Payload = payload
@@ -267,6 +263,15 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 }
 
 var _ ports.TechnicalEventRepository = (*PostgresTechnicalEventRepository)(nil)
+
+// mapSaveError translates PostgreSQL errors the core layer must react to into port errors.
+func mapSaveError(err error) error {
+	if message := friendlyForeignKeyError(err); message != "" {
+		return fmt.Errorf("%w: %s", ports.ErrReferenceNotFound, message)
+	}
+
+	return err
+}
 
 func friendlyForeignKeyError(err error) string {
 	var pgErr *pgconn.PgError

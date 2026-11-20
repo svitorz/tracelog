@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -387,14 +388,7 @@ func isUUIDLike(value string) bool {
 }
 
 func shouldRetryWithFallback(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	message := err.Error()
-	return strings.Contains(message, "application_id does not reference an existing application") ||
-		strings.Contains(message, "source_id does not reference an existing source") ||
-		strings.Contains(message, "environment_id does not reference an existing environment")
+	return errors.Is(err, ports.ErrReferenceNotFound)
 }
 
 func deriveSeverity(message string, category domain.EventCategory, payload map[string]any) domain.Severity {

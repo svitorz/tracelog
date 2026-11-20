@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"svitorz/tracelog/internal/core/domain"
@@ -16,6 +17,10 @@ type TechnicalEventFilters struct {
 	OccurredTo    *time.Time
 	Limit         int
 }
+
+// ErrReferenceNotFound reports that application_id, source_id or environment_id
+// does not reference an existing row. Implementations wrap it with the offending field.
+var ErrReferenceNotFound = errors.New("referenced entity does not exist")
 
 // TechnicalEventRepository defines persistence operations for technical events.
 type TechnicalEventRepository interface {

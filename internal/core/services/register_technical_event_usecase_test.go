@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -159,7 +160,7 @@ func TestRegisterTechnicalEventUsesFallbacksAndStoresNormalizationWarnings(t *te
 func TestRegisterTechnicalEventRetriesWithFallbackSetupAfterForeignKeyFailure(t *testing.T) {
 	repo := &stubTechnicalEventRepository{
 		saveErrors: []error{
-			errors.New("failed to save technical event: application_id does not reference an existing application"),
+			fmt.Errorf("failed to save technical event: %w: application_id", ports.ErrReferenceNotFound),
 			nil,
 		},
 	}
@@ -198,5 +199,24 @@ func TestRegisterTechnicalEventRetriesWithFallbackSetupAfterForeignKeyFailure(t 
 	warnings, ok := meta["normalization_warnings"].([]string)
 	if !ok || len(warnings) == 0 {
 		t.Fatalf("retry warnings missing: %#v", meta["normalization_warnings"])
+	}
+}
+
+func TestRegisterTechnicalEventDoesNotRetryOnOtherErrors(t *testing.T) {
+	repo := &stubTechnicalEventRepository{err: errors.New("connection refused")}
+	uc := NewRegisterTechnicalEventUseCase(repo, &stubSystemSetupRepository{saved: basicSetupFixture()})
+
+	_, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+		Message:          "x",
+		IngestionChannel: domain.IngestionHTTP,
+		ApplicationID:    "550e8400-e29b-41d4-a716-446655440000",
+		SourceID:         "660e8400-e29b-41d4-a716-446655440001",
+		EnvironmentID:    "770e8400-e29b-41d4-a716-446655440002",
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want the repository error")
+	}
+	if repo.saves != 1 {
+		t.Fatalf("repo.Save calls = %d, want 1 (no fallback retry)", repo.saves)
 	}
 }
