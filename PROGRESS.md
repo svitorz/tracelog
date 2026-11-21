@@ -4,7 +4,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 
 ## Fase atual
 
-**Fase 6 (auditoria da documentação) concluída** no branch `docs/audit`, criado a partir de `feat/sample-data` (cadeia: `fix/http-hardening` → `feat/container` → `feat/sample-data` → `docs/audit`). Nenhum tem PR; só `fix/http-hardening` foi enviado ao GitHub. Aguardando "continuar" para a Fase 7 (release v0.1.0).
+**Fase 7 (release v0.1.0) concluída** no branch `release/v0.1.0`, que contém toda a cadeia (`fix/http-hardening` → `feat/container` → `feat/sample-data` → `docs/audit` → `release/v0.1.0`). Pronta para o autor publicar: merge em `main`, tag e release (comandos abaixo). Nenhuma tag foi criada e nada foi enviado além do que o autor já tinha feito.
 
 ## Checklist
 
@@ -17,7 +17,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 | 4. Dados de exemplo e demo | `feat/sample-data` | concluída (sem push; depende de `feat/container`); GIF pendente com o autor |
 | 5. Medição de banco (opcional) | — | só se pedido |
 | 6. Auditoria da documentação | `docs/audit` | concluída (sem push) |
-| 7. Release v0.1.0 | `release/v0.1.0` | pendente |
+| 7. Release v0.1.0 | `release/v0.1.0` | concluída; tag e release com o autor |
 
 ## Decisões pendentes
 
@@ -34,6 +34,8 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 |------|---------|--------|
 | 2026-11-20 | Licença GPL-3.0, não MIT. Na Fase 1, o item "adicionar LICENSE MIT" vira "commitar o `LICENSE` GPL-3.0 e o README já ajustados" | Decisão do autor; o working tree e o `AGENTS.md` já estavam em GPL-3.0 |
 | 2026-11-20 | Spec 0001 na v0.1.0: só a parte de duplicidade. Unicidade `(application_id, external_id) WHERE external_id IS NOT NULL` por migration nova; duplicata responde `200` com `"duplicate": true` e o evento existente. Ficam para depois da v0.1.0: `external_id` obrigatório (D5) e `POST /events/batch` (D3). A spec será atualizada na Fase 2 para registrar o recorte | Mantém a Fase 2 pequena e preserva a política de ingestão tolerante (H5): sem `external_id`, o evento continua sendo gravado. Descartado: 409, que obrigaria o cliente a tratar erro num reenvio que deu certo |
+| 2026-11-21 | CHANGELOG em inglês (Keep a Changelog), cobrindo desde a tag existente `v0.0.1` (`72aa48e`, 2026-03-09) e marcando o que quebra compatibilidade | Mesma língua do README; `v0.0.1` já está publicada, então a v0.1.0 a compara com ela |
+| 2026-11-21 | Sem flag `--version` no binário | Não pedida e não necessária para a release; a versão fica na tag e no CHANGELOG |
 | 2026-11-20 | Fase 6: apagar os 6 documentos antigos de `docs/`; ficam README, guia, specs, AGENTS | Decisão do autor. Repetiam o guia e tinham dezenas de afirmações falsas; uma fonte só. Descartados: manter `http-api.md`/`cli.md` reescritos; reescrever os 6 |
 | 2026-11-20 | README em inglês, guia em português | Decisão do autor: alcance no GitHub; o README aponta para o guia |
 | 2026-11-20 | Guia reescrito inteiro em vez de remendado | Acumulava remendos de 4 fases (cabeçalho duplicado, numeração pulada, referências mortas); reescrever permitiu conferir cada afirmação |
@@ -108,6 +110,21 @@ Limitação: as provas HTTP foram feitas com `curl` contra o binário real, não
 
 Limitação: o workflow só roda de verdade no GitHub depois do push.
 
+## Medições (Fase 7)
+
+Verificação a partir de um clone limpo de `release/v0.1.0` (`228ecd7`), sem arquivos não versionados:
+
+| Verificação | Resultado |
+|-------------|-----------|
+| `gofmt -l .` | vazio |
+| `go vet ./...` | ok |
+| `go build .` | ok |
+| `go test -race -count=1 ./...` com `TRACELOG_TEST_DATABASE_URL` (PostgreSQL 16.16 descartável) | 64 funções `Test*` passaram, 0 falhas, 0 skips; 6 pacotes ok |
+| `docker build --no-cache` (imagens base em cache) | 26 s, imagem de 31,3 MB |
+| `cp .env.example .env` (só `DB_PORT` trocado, porque a 5432 local é de outro projeto) + `make demo` | exit 0 em 21 s; 429 linhas importadas, 201/200/415, pico de 2026-03-10 com 25 error + 1 fatal |
+
+Sobra: volumes de teste `clean-v010_tracelog_postgres_data`, `tracelog-demo_tracelog_postgres_data`, `tracelog-demo2_tracelog_postgres_data` e `tracelog-phase3_tracelog_postgres_data` (só dados sintéticos). Nenhum container ficou.
+
 ## Auditoria doc × código (Fase 6)
 
 | Documento | Afirmação (exemplos) | Realidade verificada | O que mudou |
@@ -165,7 +182,7 @@ Projeto compose separado (`-p tracelog-phase3`, `--env-file` em scratch com `DB_
 
 Limitações: a primeira subida (32s) é dominada pelos intervalos dos healthchecks (5s no Postgres, 10s na API), não pelo trabalho; não medi em máquina limpa sem as imagens base em cache.
 
-Sobra dos testes das fases 3 e 4: os volumes `tracelog-phase3_tracelog_postgres_data`, `tracelog-demo_tracelog_postgres_data` e `tracelog-demo2_tracelog_postgres_data` (só dados sintéticos) ficaram na máquina; containers e redes foram removidos. Para apagá-los: `docker volume rm tracelog-phase3_tracelog_postgres_data tracelog-demo_tracelog_postgres_data tracelog-demo2_tracelog_postgres_data`.
+Sobra dos testes: ver "Medições (Fase 7)".
 
 ## Medições (Fase 2)
 
@@ -245,4 +262,4 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 
 ## Próximo passo
 
-Autor: gerar o GIF (`make up` e depois `vhs docs/demo.tape`) e, se quiser, referenciá-lo no README; abrir PRs em cadeia (`fix/http-hardening` → `feat/container` → `feat/sample-data` → `docs/audit`) para o CI rodar. "continuar" inicia a Fase 7 (`release/v0.1.0`): CHANGELOG, verificação do zero e comandos de tag/release.
+Autor: (opcional) gravar o GIF; abrir o PR `release/v0.1.0` → `main` e esperar o CI; após o merge, criar a tag anotada `v0.1.0` no `main` e a release no GitHub com o texto entregue no fim da fase 7; aplicar descrição e topics. Trabalho seguinte: dashboard e endpoints de leitura (outro prompt) ou a Fase 5 (medição de banco), se pedida.
