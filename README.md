@@ -1,196 +1,174 @@
 # TraceLog
 
-TraceLog is a local technical event monitoring MVP built in Go with PostgreSQL. It receives events over HTTP, stores them in a relational database, and exposes CLI commands to inspect stored events and basic error metrics.
+[![CI](https://github.com/svitorz/tracelog/actions/workflows/ci.yml/badge.svg)](https://github.com/svitorz/tracelog/actions/workflows/ci.yml)
 
-## Project Scope
+TraceLog ingests technical events and log files, normalizes them and stores them in PostgreSQL, so you can ask simple questions from the command line: what failed, when, and how often. It is a small Go service with a hexagonal layout, built as an MVP: one HTTP endpoint, a log importer and a CLI.
 
-The current MVP supports:
+## Quickstart
 
-- HTTP ingestion through `POST /events`
-- file ingestion through `tracelog import logs --file ...`
-- PostgreSQL-backed event persistence
-- Interactive local bootstrap through `tracelog init`
-- Event listing through the CLI
-- Error frequency reporting through the CLI
-
-The current MVP does not provide dashboards, background consumers, alerting, or automated environment provisioning.
-
-## Prerequisites
-
-- Go 1.25+
-- Docker and Docker Compose
-- Git
-
-## Getting Started
-
-TraceLog must be initialized before it can receive events. The `serve` command checks for the minimum system setup and fails if `tracelog init` has not been executed successfully.
-
-
-### 1. Clone the repository
+Requires Docker and `curl`.
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/svitorz/tracelog.git
 cd tracelog
-```
-
-### 2. Start PostgreSQL
-
-```bash
-docker compose up -d postgres
-```
-
-### 3. Configure environment variables
-
-Create a local `.env` file if it does not exist:
-
-```bash
 cp .env.example .env
+make demo            # or: ./scripts/demo.sh
 ```
 
-Review the database and HTTP settings in `.env` before continuing.
+`make demo` starts PostgreSQL, applies the migrations, creates the default setup, starts the API, imports the synthetic logs in [`examples/logs/`](./examples/logs/), sends a few events with `curl` and queries the result. If port 5432 or 8080 is already taken on your machine, change `DB_PORT` or `HTTP_PORT` in `.env`.
 
-### 4. Run migrations
+Excerpt of a real run on an empty database (full output in [`docs/demo-output.txt`](./docs/demo-output.txt); the demo runs the CLI inside the container, `tracelog` there is `docker compose run --rm api`):
 
-```bash
-go run . migrate
+```text
+$ docker compose up -d --wait
+SERVICE    STATUS
+api        Up 5 seconds (healthy)
+init       Exited (0) 5 seconds ago
+migrate    Exited (0) 6 seconds ago
+postgres   Up 12 seconds (healthy)
+
+$ tracelog import logs --file /examples/checkout-api.log --file /examples/auth-service.log --file /examples/legacy-gateway.log
+Log import summary
+Files processed: 3
+Lines read: 434
+Persisted: 429
+Duplicates (already imported): 0
+Blank lines skipped: 5
+Normalized: 378
+Partially interpreted: 20
+Uncategorizable: 31
+
+$ tracelog metrics errors --from 2026-03-01 --to 2026-03-14
+DATE        ERRORS  FATAL  TOTAL
+----        ------  -----  -----
+2026-03-01  2       0      2
+2026-03-02  2       0      2
+2026-03-03  1       0      1
+2026-03-05  1       0      1
+2026-03-06  1       0      1
+2026-03-08  1       0      1
+2026-03-09  2       0      2
+2026-03-10  25      1      26
+2026-03-11  1       0      1
+2026-03-13  1       0      1
+2026-03-14  2       0      2
+
+Summary:
+  Days with errors: 11
+  Errors: 39
+  Fatal: 1
+  Average (error+fatal) per day with errors: 3.6
 ```
 
-This applies the SQL migrations embedded in the binary that are not yet recorded in the `schema_migrations` table. PostgreSQL must already be running (step 2). Running it again is safe.
+The spike on 2026-03-10 is the simulated database outage in the example data.
 
-### 5. Initialize the local MVP
+To start only the stack: `docker compose up -d --wait` (or `make up`). The API listens on `127.0.0.1:${HTTP_PORT}`.
 
-```bash
-go run . init
-```
-
-`init` is required. It interactively creates or updates:
-
-- one monitored application
-- one environment
-- one event source
-
-At the end of the command, TraceLog prints the persisted IDs. Keep them available for manual testing and CLI queries.
-
-### 6. Start the HTTP server
-
-```bash
-go run . serve
-```
-
-If the minimum setup is missing, `serve` stops with an error and instructs you to run `tracelog init` first.
-
-### 7. Send an example event
+## Sending events
 
 ```bash
 curl -X POST http://localhost:8080/events \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Database connection timeout",
-    "occurred_at": "2026-03-09T14:30:00Z",
-    "category": "system",
-    "application_id": "<application-id-from-init>",
-    "source_id": "<source-id-from-init>",
-    "environment_id": "<environment-id-from-init>",
-    "payload": {
-      "retry_count": 3,
-      "timeout_ms": 5000
-    }
-  }'
+  -H 'Content-Type: application/json' \
+  -d '{"external_id":"order-42","message":"payment provider timeout","occurred_at":"2026-03-14T18:00:00Z","category":"system"}'
 ```
 
-Notes about current ingestion behavior:
+Sending the same `external_id` again for the same application is safe. Real responses from the demo:
 
-- persisted `severity` is derived internally by the application
-- the API attempts to normalize incomplete or partially malformed payloads
-- the API only returns an HTTP error when it cannot persist any record
+```text
+$ curl -X POST http://127.0.0.1:18083/events   # evento novo
+{"id":"7a6206f0-bff1-4099-b85c-8746b5a0dee9","external_id":"demo-0001","received_at":"2026-11-20T20:58:24.671741Z","created_at":"2026-11-20T20:58:24.674644Z","duplicate":false}
 
-### 8. Query stored events
+[HTTP 201]
+
+$ curl -X POST http://127.0.0.1:18083/events   # reenvio do mesmo external_id
+{"id":"7a6206f0-bff1-4099-b85c-8746b5a0dee9","external_id":"demo-0001","received_at":"2026-11-20T20:58:24.671741Z","created_at":"2026-11-20T20:58:24.674644Z","duplicate":true}
+
+[HTTP 200]
+```
+
+Every field is optional. Missing or invalid values are normalized and the change is recorded in `payload._ingestion`; references (`application_id`, `source_id`, `environment_id`) fall back to the default setup. The API answers `413` for bodies over `HTTP_MAX_BODY_BYTES` (1 MiB by default), `415` for a `Content-Type` other than JSON and `500` with a generic message (details only in the server log). `GET /health` is liveness; `GET /ready` checks the database.
+
+## Command line
+
+| Command | What it does |
+|---------|--------------|
+| `tracelog serve` | Starts the HTTP API (graceful shutdown on SIGINT/SIGTERM) |
+| `tracelog migrate` | Applies the migrations embedded in the binary, once each |
+| `tracelog init [--defaults]` | Creates the default application, environment and source |
+| `tracelog import logs --file ...` | Imports JSON, `timestamp level message` and free-text log lines; re-importing does not duplicate |
+| `tracelog events list` | Lists events with filters (`--severity`, `--application-id`, `--environment-id`, `--from`, `--to`, `--limit`) |
+| `tracelog metrics errors` | Counts `error` and `fatal` events per UTC day |
+| `tracelog db list environments\|applications\|sources` | Shows the setup entities and their IDs |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    client["HTTP client"] -->|"POST /events"| http["adapters/http"]
+    operator["Operator"] --> cmd["cmd (Cobra CLI)"]
+
+    subgraph core["internal/core"]
+        register["RegisterTechnicalEvent"]
+        importuc["ImportLogFiles"]
+        list["ListTechnicalEvents"]
+        freq["GetErrorFrequency"]
+        setup["InitializeSystem / EnsureSystemSetup"]
+        ports[["ports: TechnicalEventRepository, ErrorFrequencyRepository, SystemSetupRepository"]]
+    end
+
+    http --> register
+    cmd --> importuc
+    importuc --> register
+    cmd --> list
+    cmd --> freq
+    cmd --> setup
+    register --> ports
+    list --> ports
+    freq --> ports
+    setup --> ports
+
+    repo["adapters/repository (pgx)"] -.->|implements| ports
+    cmd -.->|"migrate, db list: direct"| repo
+    repo --> pg[("PostgreSQL")]
+```
+
+Use cases depend only on the domain and on the port interfaces; the PostgreSQL adapter implements the ports. Two commands skip the use-case layer on purpose: `migrate` (infrastructure, not business logic) and `db list`, which still runs its three read-only queries directly in `cmd/db.go`.
+
+## What it does not do
+
+- No dashboard or web UI.
+- No authentication, TLS or rate limiting: the Docker setup publishes ports on `127.0.0.1` only and uses a default database password. Do not expose it.
+- No search, grouping by fingerprint, alerting or per-`trace_id` view yet.
+- No batch endpoint: one event per `POST /events`.
+
+## Design decisions and known limitations
+
+- **Never drop an event that can be stored.** Malformed JSON is stored with the decode error; the API only refuses what it cannot store (`413`, `415`, `500`).
+- **Severity is derived by the server**, with a keyword heuristic on whole words of the message and payload. A client cannot set it. The heuristic has no notion of negation: `0 errors found` is classified as `error`.
+- **`metrics errors` reports `error` and `fatal` separately**, per UTC day; days without errors are omitted.
+- **Idempotency:** `(application_id, external_id)` is unique; a resend returns `200` with `"duplicate": true`. Imported lines get an `external_id` derived from file name, line number and content.
+- **Import speed vs. durability:** the import connection uses `synchronous_commit=off` (80,266 lines in 34 s instead of 334 s on the test machine). A PostgreSQL crash may lose the last ~0.6 s of commits; re-importing fixes it.
+- Oversized identifiers are truncated (`external_id` at 255 characters), so two long IDs sharing that prefix collide.
+
+The full list, with the reasoning, is in the [project guide](./docs/guia-do-projeto.md) and the [specs](./docs/specs/).
+
+## Development
+
+Requires Go 1.26.11 (from `go.mod`; `GOTOOLCHAIN=auto` downloads it).
 
 ```bash
-go run . events list --limit 10
+make lint     # gofmt check + go vet
+make test     # go test -race ./...
+make build    # bin/tracelog
 ```
 
-Example filtered query:
+Repository integration tests run only when `TRACELOG_TEST_DATABASE_URL` points to a PostgreSQL database; each test uses its own throwaway schema. CI runs formatting, vet, race-enabled tests against PostgreSQL 16, the build and a Docker image build.
 
-```bash
-go run . events list --severity error
-```
+## Documentation
 
-Example metric query:
-
-```bash
-go run . metrics errors
-```
-
-## Common Commands
-
-### Bootstrap and server
-
-```bash
-go run . init
-go run . serve
-go run . serve --http-port 8081
-```
-
-### Event queries
-
-```bash
-go run . events list
-go run . events list --severity error
-go run . events list --application-id <uuid>
-go run . events list --environment-id <uuid>
-go run . events list --from 2026-03-01 --to 2026-03-09
-```
-
-### File ingestion
-
-```bash
-go run . import logs --file ./app.log
-go run . import logs --file ./app.log --file ./worker.log
-```
-
-### Metrics
-
-```bash
-go run . metrics errors
-go run . metrics errors --application-id <uuid>
-go run . metrics errors --from 2026-03-01 --to 2026-03-09
-```
-
-### Database inspection
-
-```bash
-go run . db list environments
-go run . db list applications
-go run . db list sources
-```
-
-## Event Model Notes
-
-The HTTP ingestion endpoint accepts these fields:
-
-- `message`
-- `occurred_at`
-- `category`
-- `payload`
-- `external_id`
-- `trace_id`
-- `correlation_id`
-- `application_id`
-- `source_id`
-- `environment_id`
-
-Important current behaviors:
-
-- `severity` is not accepted as a trusted client input on HTTP ingestion
-- `category` may be normalized to `unknown`
-- invalid or missing `occurred_at` may fall back to `received_at`
-- normalization details may be preserved inside the stored payload
-- file ingestion preserves `raw_line`, `normalization_status`, and `parse_error` when available
-
-## Additional Documentation
-
-- [Guia do Projeto (estado atual, instalação, build, testes)](./docs/guia-do-projeto.md)
+- [Project guide](./docs/guia-do-projeto.md) (Portuguese): configuration, API, CLI, rules, data model, tests, limitations.
+- [Specs](./docs/specs/): the decisions behind each change.
+- [AGENTS.md](./AGENTS.md): rules for contributors and AI agents.
 
 ## License
 
