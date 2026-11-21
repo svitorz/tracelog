@@ -86,7 +86,8 @@ A camada de repositório hoje é específica de PostgreSQL (`JSONB`, `gen_random
 ## 8. Documentação
 
 - `docs/guia-do-projeto.md` é o guia de referência do estado atual. **Atualize-o** quando um comportamento, comando ou variável mudar.
-- Os demais arquivos em `docs/` (`cli.md`, `http-api.md`, `domain.md`, `architecture.md`, `development.md`, `getting-started.md`) têm divergências conhecidas listadas na seção 12 do guia. Não copie afirmações deles sem verificar no código.
+- O `README.md` (em inglês) é a porta de entrada: quickstart, diagrama e o que o projeto não faz. Detalhes ficam no guia; não duplique conteúdo entre os dois.
+- Blocos de saída de comando na documentação devem ser saída real capturada (`docs/demo-output.txt` é gerado por `scripts/demo.sh`), nunca escritos à mão.
 - Não documente funcionalidade que não existe. Se algo for planejado, diga que é planejado.
 
 ## 9. Testes
@@ -107,7 +108,7 @@ A camada de repositório hoje é específica de PostgreSQL (`JSONB`, `gen_random
 
 ## 11. Pendências conhecidas
 
-Lista completa e atualizada em `docs/guia-do-projeto.md`, seções 11 e 13. Resumo dos mais importantes:
+Lista completa e atualizada em `docs/guia-do-projeto.md`, seções 12 e 13. Resumo dos mais importantes:
 
 - Sem autenticação, TLS nem rate limit (fora do MVP; ver spec 0003, seção 5).
 - Heurística de severidade não entende negação ("0 errors found" é `error`).
