@@ -4,7 +4,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 
 ## Fase atual
 
-**Fase 4 (dados de exemplo e demo) concluída** no branch `feat/sample-data`, criado a partir de `feat/container` (que sai de `fix/http-hardening`). Nenhum dos três tem PR; só `fix/http-hardening` foi enviado ao GitHub. Aguardando "continuar". A Fase 5 é opcional (só se pedida); a próxima obrigatória é a 6 (auditoria da documentação).
+**Fase 6 (auditoria da documentação) concluída** no branch `docs/audit`, criado a partir de `feat/sample-data` (cadeia: `fix/http-hardening` → `feat/container` → `feat/sample-data` → `docs/audit`). Nenhum tem PR; só `fix/http-hardening` foi enviado ao GitHub. Aguardando "continuar" para a Fase 7 (release v0.1.0).
 
 ## Checklist
 
@@ -16,7 +16,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 | 3. Container e migrations | `feat/container` | concluída (sem push; depende de `fix/http-hardening`) |
 | 4. Dados de exemplo e demo | `feat/sample-data` | concluída (sem push; depende de `feat/container`); GIF pendente com o autor |
 | 5. Medição de banco (opcional) | — | só se pedido |
-| 6. Auditoria da documentação | `docs/audit` | pendente |
+| 6. Auditoria da documentação | `docs/audit` | concluída (sem push) |
 | 7. Release v0.1.0 | `release/v0.1.0` | pendente |
 
 ## Decisões pendentes
@@ -34,6 +34,10 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 |------|---------|--------|
 | 2026-11-20 | Licença GPL-3.0, não MIT. Na Fase 1, o item "adicionar LICENSE MIT" vira "commitar o `LICENSE` GPL-3.0 e o README já ajustados" | Decisão do autor; o working tree e o `AGENTS.md` já estavam em GPL-3.0 |
 | 2026-11-20 | Spec 0001 na v0.1.0: só a parte de duplicidade. Unicidade `(application_id, external_id) WHERE external_id IS NOT NULL` por migration nova; duplicata responde `200` com `"duplicate": true` e o evento existente. Ficam para depois da v0.1.0: `external_id` obrigatório (D5) e `POST /events/batch` (D3). A spec será atualizada na Fase 2 para registrar o recorte | Mantém a Fase 2 pequena e preserva a política de ingestão tolerante (H5): sem `external_id`, o evento continua sendo gravado. Descartado: 409, que obrigaria o cliente a tratar erro num reenvio que deu certo |
+| 2026-11-20 | Fase 6: apagar os 6 documentos antigos de `docs/`; ficam README, guia, specs, AGENTS | Decisão do autor. Repetiam o guia e tinham dezenas de afirmações falsas; uma fonte só. Descartados: manter `http-api.md`/`cli.md` reescritos; reescrever os 6 |
+| 2026-11-20 | README em inglês, guia em português | Decisão do autor: alcance no GitHub; o README aponta para o guia |
+| 2026-11-20 | Guia reescrito inteiro em vez de remendado | Acumulava remendos de 4 fases (cabeçalho duplicado, numeração pulada, referências mortas); reescrever permitiu conferir cada afirmação |
+| 2026-11-20 | Saídas nos docs só copiadas de capturas (`demo-output.txt`, logs de teste) | Regra 10 do prompt; o README é montado lendo `docs/demo-output.txt` |
 | 2026-11-20 | Fase 4 guiada pela spec 0004 (`docs/specs/0004-importacao-idempotente-e-dados-de-exemplo.md`) | Mudanças de CLI (remove `seed`, resumo do import) e de comportamento do import |
 | 2026-11-20 | `seed` removido | Dados de referência vêm do `init`; demonstração vem de `examples/logs` + `import logs`. Descartado: `seed` com dataset embutido (duplica o import, incha o binário) |
 | 2026-11-20 | Reimportação: `external_id = file:` + sha256(nome base, linha, conteúdo)[:32] | Usa a deduplicação da fase 2; nome base para host e container gerarem o mesmo ID. Descartado: só documentar |
@@ -103,6 +107,22 @@ Limitação: as provas HTTP foram feitas com `curl` contra o binário real, não
 | `LICENSE` | idêntico byte a byte a `/usr/share/common-licenses/GPL-3` |
 
 Limitação: o workflow só roda de verdade no GitHub depois do push.
+
+## Auditoria doc × código (Fase 6)
+
+| Documento | Afirmação (exemplos) | Realidade verificada | O que mudou |
+|-----------|----------------------|----------------------|-------------|
+| `docs/http-api.md` | `severity`, `message`, `occurred_at` e IDs obrigatórios; 400 com 5 mensagens; categoria padrão `application`; `occurred_at` não pode ser futuro; consulta por `trace_id` | Tudo opcional e normalizado; só 405/413/415/500; padrão `unknown`; futuro não validado; não há filtro por `trace_id`; faltavam 200/`duplicate`/`/ready` | Apagado; contrato correto no guia §5.1 |
+| `docs/cli.md` | Saídas de `events list`, `metrics`, `import`, `db list` e erros | Colunas, totais e mensagens diferentes; `db list` com dados fictícios; faltavam `init`, `migrate`, `--defaults` | Apagado; guia §5.2 com saída real |
+| `docs/domain.md` | `Message` obrigatória, `OccurredAt <= ReceivedAt`, severidade validada, `Name` único, canal `file` futuro, `tracelog events create` | Nada disso é aplicado; só `service_key` é único; `file` existe; comando inexistente | Apagado; regras reais no guia §6–§8 |
+| `docs/architecture.md` | `lib/pq`, `godotenv`, tabelas no plural, domínio com validação, Docker "futuro", RabbitMQ/Grafana | `pgx/v5`, parser próprio, singular, domínio só com structs, Docker existe, roadmap do AGENTS.md não tem RabbitMQ | Apagado; diagrama fiel no README, arquitetura e desvios no guia §9 |
+| `docs/development.md` | Go 1.21, `curl` com `severity`, árvore com arquivos inexistentes, meta de 80% de cobertura | Go 1.26.11; `severity` ignorado; arquivos não existem; não há meta medida | Apagado; desenvolvimento no README e guia §4/§10/§11 |
+| `docs/getting-started.md` | Go 1.25+, só caminho interativo | Go 1.26.11; compose faz tudo | Apagado; quickstart no README |
+| `README.md` | Passos manuais com IDs do `init`, Go 1.25+, links para os 6 docs | Compose + demo; Go 1.26.11 | Reescrito (inglês), saída real, Mermaid renderizado, "o que não faz" |
+| `docs/guia-do-projeto.md` | `.env.example` copiado desatualizado; saída do `serve` escrita à mão; tabela da CLI sem `migrate`; RabbitMQ; "o script reaplica tudo"; seção de divergências | Corrigido contra código e capturas | Reescrito; +modelo de dados, +desvios (H18), +limitações (H11, fallback, corte UTF-8) |
+| `AGENTS.md` | Seção 8 apontava divergências dos docs antigos | Docs antigos removidos | Seção 8 diz onde fica cada coisa e exige saída real |
+
+Verificação: 0 links relativos quebrados em `*.md`; Mermaid do README renderizado com mermaid 10.9.1 (12 nós, sem erro); comandos citados executados contra o stack (`up --wait`, `curl` do README → 201, `curl -d` sem cabeçalho → 415, UUID malformado → erro SQLSTATE 22P02 e exit 1, `docker compose run --rm api db list sources`). Tamanho: README 177 linhas, guia 433 linhas; `docs/` passou de 3.592 para 433 linhas de Markdown (mais specs, `demo-output.txt` e `demo.tape`).
 
 ## Medições (Fase 4)
 
@@ -225,4 +245,4 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 
 ## Próximo passo
 
-Autor: gerar o GIF (`make up` e depois `vhs docs/demo.tape`) e commitar `docs/demo.gif`; abrir PRs em cadeia (`fix/http-hardening` → `feat/container` → `feat/sample-data`) para o CI rodar. "continuar" inicia a Fase 6 (`docs/audit`), a menos que o autor peça a Fase 5 (medição de banco).
+Autor: gerar o GIF (`make up` e depois `vhs docs/demo.tape`) e, se quiser, referenciá-lo no README; abrir PRs em cadeia (`fix/http-hardening` → `feat/container` → `feat/sample-data` → `docs/audit`) para o CI rodar. "continuar" inicia a Fase 7 (`release/v0.1.0`): CHANGELOG, verificação do zero e comandos de tag/release.
