@@ -122,7 +122,7 @@ Limitação: o workflow só roda de verdade no GitHub depois do push.
 | `docs/guia-do-projeto.md` | `.env.example` copiado desatualizado; saída do `serve` escrita à mão; tabela da CLI sem `migrate`; RabbitMQ; "o script reaplica tudo"; seção de divergências | Corrigido contra código e capturas | Reescrito; +modelo de dados, +desvios (H18), +limitações (H11, fallback, corte UTF-8) |
 | `AGENTS.md` | Seção 8 apontava divergências dos docs antigos | Docs antigos removidos | Seção 8 diz onde fica cada coisa e exige saída real |
 
-Verificação: 0 links relativos quebrados em `*.md`; Mermaid do README renderizado com mermaid 10.9.1 (12 nós, sem erro); comandos citados executados contra o stack (`up --wait`, `curl` do README → 201, `curl -d` sem cabeçalho → 415, UUID malformado → erro SQLSTATE 22P02 e exit 1, `docker compose run --rm api db list sources`). Tamanho: README 177 linhas, guia 433 linhas; `docs/` passou de 3.592 para 433 linhas de Markdown (mais specs, `demo-output.txt` e `demo.tape`).
+Verificação: 0 links relativos quebrados em `*.md`; Mermaid do README renderizado com mermaid 10.9.1 (12 nós, sem erro); comandos citados executados contra o stack (`up --wait`, `curl` do README → 201, `curl -d` sem cabeçalho → 415, UUID malformado → erro SQLSTATE 22P02 e exit 1, `docker compose run --rm api db list sources`). Tamanho: README 177 linhas, guia 452 linhas (`wc -l`); `docs/` passou de 3.592 para 452 linhas de Markdown (mais specs, `demo-output.txt` e `demo.tape`).
 
 ## Medições (Fase 4)
 
