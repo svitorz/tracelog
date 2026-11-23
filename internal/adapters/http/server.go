@@ -35,6 +35,8 @@ type ServerConfig struct {
 	Logger *slog.Logger
 	// Ready backs GET /ready. Nil makes /ready always report unavailable.
 	Ready ReadinessCheck
+	// Read backs the /api/v1 read routes. Nil leaves only the JSON 404 under /api/.
+	Read *ReadServices
 }
 
 // Server is the main HTTP server for the MVP.
@@ -55,6 +57,10 @@ func NewServer(cfg ServerConfig, registerUseCase *services.RegisterTechnicalEven
 	mux.HandleFunc("/health", allowMethods(handleHealth, http.MethodGet, http.MethodHead))
 	mux.HandleFunc("/ready", allowMethods(readyHandler(cfg.Ready, logger), http.MethodGet, http.MethodHead))
 	mux.HandleFunc("/events", allowMethods(eventHandler.HandleRegisterEvent, http.MethodPost))
+	mux.HandleFunc("/api/", handleAPINotFound)
+	if cfg.Read != nil {
+		registerReadRoutes(mux, cfg.Read, logger)
+	}
 
 	return &Server{
 		httpServer: &http.Server{

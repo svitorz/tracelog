@@ -1,0 +1,11 @@
+{
+  "counts": {
+    "debug": 0,
+    "info": 266,
+    "warn": 73,
+    "error": 38,
+    "fatal": 1
+  },
+  "total": 378
+}
+

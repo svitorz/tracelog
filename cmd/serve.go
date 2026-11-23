@@ -57,6 +57,15 @@ var serveCmd = &cobra.Command{
 
 		eventRepo := repository.NewPostgresTechnicalEventRepository(db)
 		registerUseCase := services.NewRegisterTechnicalEventUseCase(eventRepo, setupRepo)
+		statsRepo := repository.NewPostgresEventStatsRepository(db)
+		read := &httpadapter.ReadServices{
+			ListEvents:     services.NewListEventsPageUseCase(eventRepo),
+			GetEvent:       services.NewGetTechnicalEventUseCase(eventRepo),
+			ErrorFrequency: services.NewGetDailyErrorFrequencyUseCase(repository.NewPostgresErrorFrequencyRepository(db)),
+			SeverityCounts: services.NewGetSeverityCountsUseCase(statsRepo),
+			DataRange:      services.NewGetDataRangeUseCase(statsRepo, nil),
+			Reference:      services.NewListReferenceDataUseCase(repository.NewPostgresReferenceDataRepository(db)),
+		}
 
 		server := httpadapter.NewServer(httpadapter.ServerConfig{
 			Addr:         fmt.Sprintf(":%d", port),
@@ -64,6 +73,7 @@ var serveCmd = &cobra.Command{
 			Ready: func(ctx context.Context) error {
 				return repository.Ping(ctx, db)
 			},
+			Read: read,
 		}, registerUseCase)
 
 		ln, err := net.Listen("tcp", server.Addr())
