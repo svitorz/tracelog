@@ -272,14 +272,14 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 
 ## Fase atual (Trilha 2)
 
-**Fase 1 (spec da API de leitura) entregue para aprovação** em `feat/read-api`: `docs/specs/0005-api-de-leitura.md`, status "Proposta". Nenhum código alterado. Esperando as decisões (a)–(j) do autor.
+**Fase 1 concluída:** spec 0005 aprovada pelo autor (2026-11-23) em `feat/read-api`. Esperando o "continuar" para a Fase 2 (implementação), e o OK para a refatoração do `cmd/db.go`.
 
 ## Checklist (Trilha 2)
 
 | Fase | Branch | Status |
 |------|--------|--------|
 | 0. Orientação e portão | `feat/read-api` | concluída; P0–P4 satisfeitos |
-| 1. Spec 0005 (API de leitura) | `feat/read-api` | proposta escrita; aguardando aprovação |
+| 1. Spec 0005 (API de leitura) | `feat/read-api` | concluída; aprovada em 2026-11-23 |
 | 2. Implementação da API de leitura | `feat/read-api` | pendente |
 | 3. Spec 0006 (interface web) | a definir (parte do `main` após o merge da fase 2) | pendente |
 | 4. Scaffold de `web/` e CI | `feat/web-dashboard` | pendente |
@@ -289,13 +289,15 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 
 ## Decisões pendentes (Trilha 2)
 
-Spec 0005, seção 8 (recomendação entre parênteses): (a) prefixo (`/api/v1`, `POST /events` sem espelho); (b) paginação (keyset com cursor opaco); (c) dias vazios (preenchidos no Go, `from`/`to` obrigatórios, teto de 366 dias); (d) campos (lista sem payload, detalhe completo); (e) exposição (`HTTP_HOST=127.0.0.1` por padrão, sem CORS); (f) erros (`limit` 1–200, `400` estrito com `code` e `field`, erros tipados); (g) período padrão (`data-range` com 14 dias até o erro mais recente); (h) índice (nenhum sem medição); (i) antecipação (registrada); (j) referência (três rotas). Questões em aberto: severidade múltipla, dataset com uma aplicação só, cursor x filtros.
+1. OK para refatorar `cmd/db.go` para o novo `ReferenceDataRepository` (commit separado, Fase 2).
+2. Dataset com uma aplicação só (spec 0005, questão 2): decidir antes da Fase 6.
 
 ## Log de decisões (Trilha 2)
 
 | Data | Decisão | Porquê |
 |------|---------|--------|
 | 2026-11-23 | Antecipar "API JSON e UI web" (roadmap item 4) e dashboards (item 6) para antes do núcleo de investigação (item 1) e do SQLite (item 2) | Decisão do autor (portfólio). Custo: a leitura nasce sobre a camada PostgreSQL específica; quando o SQLite vier, as consultas novas também terão de ser reescritas. Mitigação: leitura atrás de ports, SQL só nos adapters |
+| 2026-11-23 | Spec 0005 aprovada com todas as recomendações: `/api/v1` (sem espelhar `POST /events`); keyset `(occurred_at, id)` com cursor opaco não assinado; dias vazios preenchidos no Go com `from`/`to` obrigatórios e teto de 366 dias; lista sem `payload`/`raw_line`/`parse_error`, detalhe completo; `HTTP_HOST` padrão `127.0.0.1` (compose `0.0.0.0`), sem CORS; `limit` 1–200 e `400` estrito com `code`/`field`; `data-range` com 14 dias até o erro mais recente; índice só com medição; três rotas de referência; sem severidade múltipla; cursor reaproveitável entre filtros | Decisão do autor; justificativas e alternativas descartadas na spec 0005 §8 |
 | 2026-11-23 | Verificação da Fase 0 em clone limpo (`git clone` local em scratch) e ambiente descartável: Postgres `tracelog-t2p0-pg` em `127.0.0.1:55440`, demo com projeto compose `tracelog-t2p0` (`DB_PORT=55441`, `HTTP_PORT=18090`, `--env-file` fora do repositório) | A 5432 local é de outro projeto; nada do `.env` do repositório foi lido ou criado |
 | 2026-11-23 | CI do `main` consultado pela API pública do GitHub (`/commits/<sha>/check-runs`), porque o `gh` não está instalado | Regra: não presumir CI verde |
 
@@ -333,4 +335,4 @@ Sobra: volume `tracelog-t2p0_tracelog_postgres_data` (dados sintéticos), somado
 
 ## Próximo passo (Trilha 2)
 
-Autor: decidir (a)–(j) e as questões em aberto da spec 0005. Depois: ajustar a spec, mudar o status para "Aprovada" e começar a Fase 2 (implementação) em `feat/read-api`.
+Autor: responder "continuar" (e dar ou negar o OK para refatorar `cmd/db.go`). Depois: Fase 2 em `feat/read-api`: erros tipados e ports, casos de uso com fakes, repositório com integração, handlers com `httptest` e fixtures, `HTTP_HOST`, medição com `loggen -scale 200`, guia §5.1 e CHANGELOG.

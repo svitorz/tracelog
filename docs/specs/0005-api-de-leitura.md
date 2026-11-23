@@ -1,6 +1,6 @@
 # Spec 0005: API JSON de leitura
 
-- **Status:** Proposta
+- **Status:** Aprovada (todas as recomendações da seção 8 e das questões em aberto confirmadas pelo autor em 2026-11-23)
 - **Autor:** Vitor Fábio
 - **Data:** 2026-11-23
 - **Escopo:** novas rotas HTTP de leitura, erros tipados de leitura, paginação, endereço de escuta do `serve`, novos ports de leitura
@@ -363,6 +363,8 @@ Cada item traz a recomendação primeiro.
 - Descartado: `GET /api/v1/reference` com as três listas (uma requisição só, mas um contrato menos óbvio). A diferença é pequena; aceito qualquer uma.
 
 ## 9. Questões em aberto
+
+Resolvidas em 2026-11-23 com as recomendações abaixo: (1) sem severidade múltipla no MVP; (2) dataset com uma aplicação fica como está nesta spec e volta a ser decidido antes da fase 6; (3) cursor reaproveitável com filtros diferentes.
 
 1. **Severidade múltipla na lista** (`severity=error,fatal`). Recomendação: não no MVP, para manter paridade com a CLI e com o port atual. Se a tela de Eventos pedir na fase 5, a mudança é aditiva (`= ANY`) e entra por atualização desta spec.
 2. **O dataset de exemplo tem uma aplicação só.** `checkout-api`, `auth-service` e `legacy-gateway` são nomes de arquivo; o import grava tudo na aplicação do `init`. Os filtros de aplicação e ambiente funcionam, mas não demonstram nada. Opções, todas fora desta spec:
