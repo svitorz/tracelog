@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	"svitorz/tracelog/internal/adapters/repository"
+	"svitorz/tracelog/internal/core/services"
 
 	"github.com/spf13/cobra"
 )
@@ -25,39 +26,23 @@ var dbListEnvironmentsCmd = &cobra.Command{
 	Use:   "environments",
 	Short: "List all environments",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		db, err := repository.OpenPostgres(appConfig.DB)
-		if err != nil {
-			return fmt.Errorf("failed to open PostgreSQL connection: %w", err)
-		}
-		defer db.Close()
-
-		rows, err := db.QueryContext(context.Background(), `
-			SELECT id, code, name, COALESCE(description, '')
-			FROM environment
-			ORDER BY code
-		`)
-		if err != nil {
-			return fmt.Errorf("failed to query environments: %w", err)
-		}
-		defer rows.Close()
-
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tCODE\tNAME\tDESCRIPTION")
-		fmt.Fprintln(w, "--\t----\t----\t-----------")
-
-		count := 0
-		for rows.Next() {
-			var id, code, name, desc string
-			if err := rows.Scan(&id, &code, &name, &desc); err != nil {
+		return withReferenceData(func(ctx context.Context, uc *services.ListReferenceDataUseCase) error {
+			items, err := uc.Environments(ctx)
+			if err != nil {
 				return err
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", id, code, name, desc)
-			count++
-		}
 
-		w.Flush()
-		cmd.Printf("\nTotal: %d environment(s)\n", count)
-		return nil
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tCODE\tNAME\tDESCRIPTION")
+			fmt.Fprintln(w, "--\t----\t----\t-----------")
+			for _, e := range items {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.ID, e.Code, e.Name, e.Description)
+			}
+			w.Flush()
+
+			cmd.Printf("\nTotal: %d environment(s)\n", len(items))
+			return nil
+		})
 	},
 }
 
@@ -65,39 +50,23 @@ var dbListApplicationsCmd = &cobra.Command{
 	Use:   "applications",
 	Short: "List all monitored applications",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		db, err := repository.OpenPostgres(appConfig.DB)
-		if err != nil {
-			return fmt.Errorf("failed to open PostgreSQL connection: %w", err)
-		}
-		defer db.Close()
-
-		rows, err := db.QueryContext(context.Background(), `
-			SELECT id, name, service_key, COALESCE(description, '')
-			FROM monitored_application
-			ORDER BY name
-		`)
-		if err != nil {
-			return fmt.Errorf("failed to query applications: %w", err)
-		}
-		defer rows.Close()
-
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tNAME\tSERVICE_KEY\tDESCRIPTION")
-		fmt.Fprintln(w, "--\t----\t-----------\t-----------")
-
-		count := 0
-		for rows.Next() {
-			var id, name, key, desc string
-			if err := rows.Scan(&id, &name, &key, &desc); err != nil {
+		return withReferenceData(func(ctx context.Context, uc *services.ListReferenceDataUseCase) error {
+			items, err := uc.Applications(ctx)
+			if err != nil {
 				return err
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", id, name, key, desc)
-			count++
-		}
 
-		w.Flush()
-		cmd.Printf("\nTotal: %d application(s)\n", count)
-		return nil
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tNAME\tSERVICE_KEY\tDESCRIPTION")
+			fmt.Fprintln(w, "--\t----\t-----------\t-----------")
+			for _, a := range items {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", a.ID, a.Name, a.ServiceKey, a.Description)
+			}
+			w.Flush()
+
+			cmd.Printf("\nTotal: %d application(s)\n", len(items))
+			return nil
+		})
 	},
 }
 
@@ -105,40 +74,36 @@ var dbListSourcesCmd = &cobra.Command{
 	Use:   "sources",
 	Short: "List all event sources",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		db, err := repository.OpenPostgres(appConfig.DB)
-		if err != nil {
-			return fmt.Errorf("failed to open PostgreSQL connection: %w", err)
-		}
-		defer db.Close()
-
-		rows, err := db.QueryContext(context.Background(), `
-			SELECT id, name, source_type, COALESCE(description, '')
-			FROM event_source
-			ORDER BY name
-		`)
-		if err != nil {
-			return fmt.Errorf("failed to query sources: %w", err)
-		}
-		defer rows.Close()
-
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tNAME\tTYPE\tDESCRIPTION")
-		fmt.Fprintln(w, "--\t----\t----\t-----------")
-
-		count := 0
-		for rows.Next() {
-			var id, name, stype, desc string
-			if err := rows.Scan(&id, &name, &stype, &desc); err != nil {
+		return withReferenceData(func(ctx context.Context, uc *services.ListReferenceDataUseCase) error {
+			items, err := uc.Sources(ctx)
+			if err != nil {
 				return err
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", id, name, stype, desc)
-			count++
-		}
 
-		w.Flush()
-		cmd.Printf("\nTotal: %d source(s)\n", count)
-		return nil
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tNAME\tTYPE\tDESCRIPTION")
+			fmt.Fprintln(w, "--\t----\t----\t-----------")
+			for _, src := range items {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", src.ID, src.Name, src.SourceType, src.Description)
+			}
+			w.Flush()
+
+			cmd.Printf("\nTotal: %d source(s)\n", len(items))
+			return nil
+		})
 	},
+}
+
+// withReferenceData opens the database and runs fn with the reference data use case.
+func withReferenceData(fn func(context.Context, *services.ListReferenceDataUseCase) error) error {
+	db, err := repository.OpenPostgres(appConfig.DB)
+	if err != nil {
+		return fmt.Errorf("failed to open PostgreSQL connection: %w", err)
+	}
+	defer db.Close()
+
+	uc := services.NewListReferenceDataUseCase(repository.NewPostgresReferenceDataRepository(db))
+	return fn(context.Background(), uc)
 }
 
 func init() {
