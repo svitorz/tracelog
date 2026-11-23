@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	httpadapter "svitorz/tracelog/internal/adapters/http"
@@ -68,7 +69,7 @@ var serveCmd = &cobra.Command{
 		}
 
 		server := httpadapter.NewServer(httpadapter.ServerConfig{
-			Addr:         fmt.Sprintf(":%d", port),
+			Addr:         net.JoinHostPort(appConfig.HTTP.Host, strconv.Itoa(port)),
 			MaxBodyBytes: appConfig.HTTP.MaxBodyBytes,
 			Ready: func(ctx context.Context) error {
 				return repository.Ping(ctx, db)

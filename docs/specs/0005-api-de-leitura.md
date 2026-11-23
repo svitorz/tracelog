@@ -117,6 +117,7 @@ As rotas existentes (`/health`, `/ready`, `POST /events`) não mudam. Qualquer c
 
 - Variável nova `HTTP_HOST`, padrão `127.0.0.1`. O `serve` passa a escutar em `HTTP_HOST:HTTP_PORT`.
 - No compose, o serviço `api` recebe `HTTP_HOST=0.0.0.0` (é necessário dentro do container para a porta publicada funcionar). A publicação continua só em `127.0.0.1`.
+- A imagem também define `ENV HTTP_HOST=0.0.0.0` (acrescentado na implementação, 2026-11-23): sem isso, `docker run -p` fora do compose publicaria uma porta inalcançável.
 - **Mudança incompatível:** quem roda `tracelog serve` no host e recebe eventos de outras máquinas precisa definir `HTTP_HOST=0.0.0.0`. Vai no CHANGELOG como *Changed* com aviso.
 - Validação: um valor que não é IP nem nome de host válido faz a inicialização falhar, como `HTTP_PORT`.
 

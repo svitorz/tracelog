@@ -3,8 +3,10 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -13,6 +15,8 @@ const (
 	defaultAppName  = "tracelog"
 	defaultAppEnv   = "local"
 	defaultHTTPPort = 8080
+	// Só localhost por padrão: a API de leitura expõe payloads sem autenticação (spec 0005).
+	defaultHTTPHost = "127.0.0.1"
 	// 1 MiB (spec 0002, seção 5).
 	defaultHTTPMaxBodyBytes = 1 << 20
 	defaultDBHost           = "localhost"
@@ -33,6 +37,7 @@ type AppConfig struct {
 }
 
 type HTTPConfig struct {
+	Host         string
 	Port         int
 	MaxBodyBytes int64
 }
@@ -94,6 +99,7 @@ func Load() (Config, error) {
 			Env:  envString("APP_ENV", defaultAppEnv),
 		},
 		HTTP: HTTPConfig{
+			Host:         envString("HTTP_HOST", defaultHTTPHost),
 			Port:         httpPort,
 			MaxBodyBytes: int64(maxBodyBytes),
 		},
@@ -124,6 +130,10 @@ func (c Config) Validate() error {
 
 	if strings.TrimSpace(c.App.Env) == "" {
 		validationErrors = append(validationErrors, "APP_ENV cannot be empty")
+	}
+
+	if !isValidHost(c.HTTP.Host) {
+		validationErrors = append(validationErrors, "HTTP_HOST must be an IP address or a host name")
 	}
 
 	if err := validatePort(c.HTTP.Port, "HTTP_PORT"); err != nil {
@@ -165,6 +175,12 @@ func (c Config) Validate() error {
 	}
 
 	return nil
+}
+
+var hostNamePattern = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$`)
+
+func isValidHost(host string) bool {
+	return net.ParseIP(host) != nil || (len(host) <= 253 && hostNamePattern.MatchString(host))
 }
 
 func validatePort(port int, key string) error {

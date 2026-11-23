@@ -5,6 +5,9 @@ x-tracelog-env: &tracelog-env
   APP_NAME: ${APP_NAME:-tracelog}
   APP_ENV: ${APP_ENV:-local}
   HTTP_PORT: "8080"
+  # Dentro do container a API escuta em todas as interfaces para a porta publicada
+  # funcionar; a publicação no host continua só em 127.0.0.1 (spec 0005, seção 4.7).
+  HTTP_HOST: "0.0.0.0"
   HTTP_MAX_BODY_BYTES: ${HTTP_MAX_BODY_BYTES:-1048576}
   # Dentro da rede do compose o banco é o serviço "postgres", sempre na 5432;
   # DB_HOST/DB_PORT do .env valem só para a CLI rodando no host.
