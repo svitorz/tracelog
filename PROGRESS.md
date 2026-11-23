@@ -272,20 +272,24 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 
 ## Fase atual (Trilha 2)
 
-**Fase 0 (orientação e portão) concluída** em `feat/read-api` (criado do `main` em `492f362`). Esperando o "continuar" do autor para a Fase 1 (spec 0005).
+**Fase 1 (spec da API de leitura) entregue para aprovação** em `feat/read-api`: `docs/specs/0005-api-de-leitura.md`, status "Proposta". Nenhum código alterado. Esperando as decisões (a)–(j) do autor.
 
 ## Checklist (Trilha 2)
 
 | Fase | Branch | Status |
 |------|--------|--------|
 | 0. Orientação e portão | `feat/read-api` | concluída; P0–P4 satisfeitos |
-| 1. Spec 0005 (API de leitura) | `feat/read-api` | pendente |
+| 1. Spec 0005 (API de leitura) | `feat/read-api` | proposta escrita; aguardando aprovação |
 | 2. Implementação da API de leitura | `feat/read-api` | pendente |
 | 3. Spec 0006 (interface web) | a definir (parte do `main` após o merge da fase 2) | pendente |
 | 4. Scaffold de `web/` e CI | `feat/web-dashboard` | pendente |
 | 5. Telas (Eventos, Detalhe, Visão geral) | `feat/web-dashboard` | pendente |
 | 6. Integração e entrega | `docs/dashboard` | pendente |
 | 7. Documentação e release | `docs/dashboard` | pendente |
+
+## Decisões pendentes (Trilha 2)
+
+Spec 0005, seção 8 (recomendação entre parênteses): (a) prefixo (`/api/v1`, `POST /events` sem espelho); (b) paginação (keyset com cursor opaco); (c) dias vazios (preenchidos no Go, `from`/`to` obrigatórios, teto de 366 dias); (d) campos (lista sem payload, detalhe completo); (e) exposição (`HTTP_HOST=127.0.0.1` por padrão, sem CORS); (f) erros (`limit` 1–200, `400` estrito com `code` e `field`, erros tipados); (g) período padrão (`data-range` com 14 dias até o erro mais recente); (h) índice (nenhum sem medição); (i) antecipação (registrada); (j) referência (três rotas). Questões em aberto: severidade múltipla, dataset com uma aplicação só, cursor x filtros.
 
 ## Log de decisões (Trilha 2)
 
@@ -329,4 +333,4 @@ Sobra: volume `tracelog-t2p0_tracelog_postgres_data` (dados sintéticos), somado
 
 ## Próximo passo (Trilha 2)
 
-Autor: ler o relatório da Fase 0 e responder "continuar". Depois: Fase 1, escrever `docs/specs/0005-...md` (somente documento, status "Proposta").
+Autor: decidir (a)–(j) e as questões em aberto da spec 0005. Depois: ajustar a spec, mudar o status para "Aprovada" e começar a Fase 2 (implementação) em `feat/read-api`.
