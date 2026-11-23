@@ -124,7 +124,7 @@ As rotas existentes (`/health`, `/ready`, `POST /events`) não mudam. Qualquer c
 
 - Sem CORS: nenhuma rota envia `Access-Control-Allow-Origin`. Em desenvolvimento, a UI usa o proxy do Vite; em produção, a mesma origem (decisão da spec 0006). Navegadores bloqueiam a leitura de outra origem por padrão.
 - Todas as respostas de `/api/` levam `Cache-Control: no-store` e `X-Content-Type-Options: nosniff`.
-- O JSON é gerado por `encoding/json` com o escape de HTML padrão (`<` vira `<`), o que é defesa em profundidade e não substitui a renderização como texto na UI (regra de segurança do front na spec 0006).
+- O JSON é gerado por `encoding/json` com o escape de HTML padrão (`<` vira `\u003c`), o que é defesa em profundidade e não substitui a renderização como texto na UI (regra de segurança do front na spec 0006).
 - `payload`, `message` e `raw_line` são entrada não confiável, gravada como veio. A API não os interpreta nem os sanitiza: só serializa.
 - Risco aceito e documentado: quem alcança a porta lê tudo, inclusive dados sensíveis que um cliente tenha enviado. O bind em localhost é a mitigação; não é controle de acesso.
 
@@ -292,7 +292,7 @@ Nenhuma prevista. Um índice só entra na fase 2 se a medição `EXPLAIN (ANALYZ
 6. Banco fora → `500` com `{"error":"internal error","code":"internal"}`, sem texto do banco.
 7. `error-frequency` de `2026-03-01` a `2026-03-14` no dataset de exemplo: 14 dias, inclusive `2026-03-04` com zeros, e `2026-03-10` com `errors: 25, fatal: 1`.
 8. `data-range` no dataset de exemplo: `default_from` = `2026-03-01`, `default_to` = `2026-03-14`. Os casos sem erros e sem eventos são cobertos por teste de caso de uso.
-9. O detalhe de um evento com `message` `<script>alert(1)</script>` devolve o texto com `<` e `Content-Type: application/json`, mais os cabeçalhos da seção 4.8.
+9. O detalhe de um evento com `message` `<script>alert(1)</script>` devolve o texto com `\u003c` e `Content-Type: application/json`, mais os cabeçalhos da seção 4.8.
 10. O `serve` sem `HTTP_HOST` escuta só em `127.0.0.1` (verificado com `ss -ltn`). `make demo` continua funcionando, com a API alcançável pela porta publicada.
 11. Os casos de uso novos têm testes com fakes; os handlers, com `httptest`; o repositório, testes de integração com `TRACELOG_TEST_DATABASE_URL` (`SKIP` sem banco).
 12. As medições `EXPLAIN (ANALYZE, BUFFERS)` da lista (primeira página, página profunda por cursor, com filtro de severidade) e da frequência, com `loggen -scale 200`, ficam registradas no `PROGRESS.md` com método e limitações, com ou sem índice novo.
