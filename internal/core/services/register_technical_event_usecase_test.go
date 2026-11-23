@@ -42,6 +42,10 @@ func (r *stubTechnicalEventRepository) FindByFilters(context.Context, ports.Tech
 	return nil, nil
 }
 
+func (r *stubTechnicalEventRepository) FindByID(context.Context, string) (domain.TechnicalEvent, error) {
+	return domain.TechnicalEvent{}, ports.ErrNotFound
+}
+
 func TestRegisterTechnicalEventDerivesErrorSeverityFromMessage(t *testing.T) {
 	repo := &stubTechnicalEventRepository{}
 	uc := NewRegisterTechnicalEventUseCase(repo)

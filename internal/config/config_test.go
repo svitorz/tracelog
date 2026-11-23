@@ -188,3 +188,38 @@ func TestDSNQuotesSpecialCharacters(t *testing.T) {
 		t.Fatalf("parsed = user %q db %q host %q port %d, want the configured values", parsed.User, parsed.Database, parsed.Host, parsed.Port)
 	}
 }
+
+func TestLoadValidatesHTTPHost(t *testing.T) {
+	tests := map[string]bool{
+		"":                 true, // padrão 127.0.0.1
+		"0.0.0.0":          true,
+		"::1":              true,
+		"localhost":        true,
+		"api.example.test": true,
+		"bad host":         false,
+		"-bad":             false,
+		"http://x":         false,
+	}
+	for value, ok := range tests {
+		t.Run(value, func(t *testing.T) {
+			withTempWorkingDir(t)
+			withEnv(t, map[string]string{
+				"HTTP_HOST":   value,
+				"DB_NAME":     "tracelog",
+				"DB_USER":     "postgres",
+				"DB_PASSWORD": "postgres",
+			})
+
+			cfg, err := Load()
+			if ok && err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !ok && (err == nil || !strings.Contains(err.Error(), "HTTP_HOST")) {
+				t.Fatalf("Load() error = %v, want an HTTP_HOST error", err)
+			}
+			if value == "" && cfg.HTTP.Host != "127.0.0.1" {
+				t.Fatalf("default HTTP.Host = %q, want 127.0.0.1", cfg.HTTP.Host)
+			}
+		})
+	}
+}

@@ -16,7 +16,9 @@ FROM alpine:3.24
 RUN addgroup -S -g 10001 tracelog && adduser -S -D -H -u 10001 -G tracelog tracelog
 COPY --from=build /out/tracelog /usr/local/bin/tracelog
 
-# Sem .env na imagem: a configuração vem só de variáveis de ambiente.
+# Sem .env na imagem: a configuração vem só de variáveis de ambiente. HTTP_HOST=0.0.0.0
+# porque o padrão do binário (127.0.0.1) deixaria a porta publicada inalcançável.
+ENV HTTP_HOST=0.0.0.0
 WORKDIR /app
 USER 10001:10001
 EXPOSE 8080

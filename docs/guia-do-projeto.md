@@ -13,9 +13,10 @@ TraceLog é um MVP de observabilidade escrito em Go com PostgreSQL. Ele:
 - recebe eventos técnicos de aplicações via HTTP (`POST /events`);
 - importa eventos de arquivos de log em três formatos (`tracelog import logs`);
 - normaliza o que chega, deriva a severidade no servidor e grava tudo em PostgreSQL;
-- oferece uma CLI para listar eventos, contar erros por dia e inspecionar o setup.
+- oferece uma CLI para listar eventos, contar erros por dia e inspecionar o setup;
+- expõe uma API JSON de leitura em `/api/v1` (lista paginada, detalhe, frequência de erros, contadores, dados de referência; spec 0005).
 
-**O que ele não faz:** não tem dashboard nem interface web, autenticação, TLS, rate limit, alertas, busca textual, agrupamento por fingerprint nem visão por `trace_id`. Não há lote no HTTP (`POST /events/batch`). Esses itens estão no roadmap do `AGENTS.md` ou nas specs como trabalho futuro.
+**O que ele não faz:** não tem dashboard nem interface web (planejados na spec 0006), autenticação, TLS, rate limit, alertas, busca textual, agrupamento por fingerprint nem visão por `trace_id`. Não há lote no HTTP (`POST /events/batch`). Esses itens estão no roadmap do `AGENTS.md` ou nas specs como trabalho futuro.
 
 ### Decisões de comportamento que importam
 
@@ -50,6 +51,7 @@ cp .env.example .env
 |----------|-------------|--------|-----------|
 | `APP_NAME` | não | `tracelog` | Nome exibido no log do `serve`. |
 | `APP_ENV` | não | `local` | Ambiente exibido no log do `serve`. |
+| `HTTP_HOST` | não | `127.0.0.1` | Endereço em que o `serve` escuta. Use `0.0.0.0` para receber de outras máquinas. A imagem e o compose usam `0.0.0.0` dentro do container. |
 | `HTTP_PORT` | não | `8080` | Porta da API; o compose a publica em `127.0.0.1`. |
 | `HTTP_MAX_BODY_BYTES` | não | `1048576` | Tamanho máximo do corpo de `POST /events`. Acima disso: `413`. Precisa ser positivo. |
 | `DB_HOST` | não | `localhost` | Host do PostgreSQL para a CLI no host (o container usa `postgres`). |
@@ -84,7 +86,7 @@ docker compose ps -a
 - Só o banco, para usar a CLI no host: `docker compose up -d postgres`.
 - Apagar os dados: `docker compose down -v`.
 
-**O que não é seguro neste setup:** a API não tem autenticação (quem alcança a porta grava eventos), não há TLS (nem cliente→API nem API→banco), a senha padrão do banco é `postgres` e não há rate limit. Publicar só em `127.0.0.1` reduz a exposição, mas não resolve nada disso. É um setup de uso local.
+**O que não é seguro neste setup:** a API não tem autenticação (quem alcança a porta grava eventos e **lê todos eles**, inclusive `payload`, `raw_line` e o corpo bruto em `_ingestion`, sem nenhuma redação de dado sensível), não há TLS (nem cliente→API nem API→banco), a senha padrão do banco é `postgres` e não há rate limit. Publicar só em `127.0.0.1` reduz a exposição, mas não resolve nada disso. É um setup de uso local.
 
 ### 3.3 Migrations
 
@@ -100,8 +102,9 @@ Saída real numa base vazia e, em seguida, numa segunda execução:
 [migrate] applied 000001_initial_schema
 [migrate] applied 000002_add_log_import_fields
 [migrate] applied 000003_external_id_per_application
-[migrate] database is up to date (3 migrations)
-[migrate] database is up to date (3 migrations)
+[migrate] applied 000004_event_severity_occurred_at_index
+[migrate] database is up to date (4 migrations)
+[migrate] database is up to date (4 migrations)
 ```
 
 | Arquivo | Conteúdo |
@@ -109,6 +112,7 @@ Saída real numa base vazia e, em seguida, numa segunda execução:
 | `000001_initial_schema.sql` | Tabelas, FKs e índices (seção 8). Também cria a extensão `pgcrypto`, que nenhum código usa; foi mantida de propósito (spec 0003, seção 9). |
 | `000002_add_log_import_fields.sql` | Colunas `raw_line`, `normalization_status`, `parse_error` e índice. |
 | `000003_external_id_per_application.sql` | Troca o `UNIQUE (external_id)` global pelo índice único parcial `(application_id, external_id)`. |
+| `000004_event_severity_occurred_at_index.sql` | Índice `(severity, occurred_at DESC, id DESC)` para a lista filtrada por severidade e a contagem por severidade da API de leitura (spec 0005, seção 6). Sobre uma tabela grande, a criação bloqueia escritas enquanto dura (190 ms para 80 mil linhas). |
 
 ### 3.4 Setup inicial
 
@@ -148,9 +152,11 @@ Saída real (capturada num teste com banco em `127.0.0.1:55433` e `HTTP_PORT=180
 [serve] Ready to receive events at POST /events
 ```
 
+O `serve` escuta em `HTTP_HOST:HTTP_PORT` (padrão `127.0.0.1`, spec 0005); a mensagem acima mostra só a porta.
+
 Sem o setup, falha com ``basic system setup is missing; run `tracelog init` before `tracelog serve` ``. `Ctrl+C` ou `SIGTERM` param de aceitar conexões, esperam as requisições em andamento por até 8s, fecham o pool e imprimem `[serve] Shutdown complete`.
 
-Timeouts (spec 0002): cabeçalho 5s, leitura 15s, escrita 15s, ociosidade 60s, 10s por `POST /events`, 2s no `/ready`. Pool: até 10 conexões.
+Timeouts (spec 0002): cabeçalho 5s, leitura 15s, escrita 15s, ociosidade 60s, 10s por `POST /events` e por rota de leitura, 2s no `/ready`. Pool: até 10 conexões.
 
 ---
 
@@ -163,6 +169,7 @@ Timeouts (spec 0002): cabeçalho 5s, leitura 15s, escrita 15s, ociosidade 60s, 1
 | `GET`, `HEAD` | `/health` | Liveness: `200 {"status":"ok"}`. Não consulta o banco. |
 | `GET`, `HEAD` | `/ready` | Readiness: `200 {"status":"ready"}` ou `503 {"status":"unavailable"}`. |
 | `POST` | `/events` | `201` se o evento é novo; `200` se já existia. |
+| `GET`, `HEAD` | `/api/v1/...` | API de leitura (seção 5.1.1). |
 
 Corpo de `POST /events` (todos os campos são opcionais):
 
@@ -206,6 +213,71 @@ $ curl -X POST http://127.0.0.1:18083/events   # Content-Type que não é JSON
 | `500` | Falha interna (ex.: banco fora). Corpo `{"error":"internal error"}`; o detalhe vai para o log do servidor. |
 
 JSON malformado **não** é erro: o evento é gravado com `payload._ingestion.decode_error` e `payload._ingestion.raw_request_body` (o corpo bruto só é guardado nesse caso).
+
+#### 5.1.1 API de leitura (spec 0005)
+
+Só `GET` e `HEAD`; outro método → `405` com `Allow: GET, HEAD`. Respostas com `Cache-Control: no-store` e `X-Content-Type-Options: nosniff`, horários em UTC e strings opcionais ausentes como `null`. Não há CORS: em outra origem, o navegador bloqueia a leitura.
+
+| Rota | Parâmetros | Resposta |
+|------|------------|----------|
+| `/api/v1/events` | `severity`, `application_id`, `environment_id`, `from`, `to`, `limit` (1–200, padrão 50), `cursor` | `{"items":[...],"next_cursor":...}`; ordem `occurred_at` e `id` decrescentes; itens sem `payload`, `raw_line` e `parse_error` |
+| `/api/v1/events/{id}` | — | Evento completo, com `payload` (inclusive `_ingestion`), `raw_line` e `parse_error` |
+| `/api/v1/metrics/error-frequency` | `from` e `to` (obrigatórios, até 366 dias), `application_id`, `environment_id` | `error` e `fatal` por dia UTC, **com dias vazios preenchidos** |
+| `/api/v1/metrics/severity-counts` | `application_id`, `environment_id`, `from`, `to` | As cinco severidades, sempre presentes, e `total` |
+| `/api/v1/metrics/data-range` | — | Menor e maior `occurred_at`, último erro e `default_from`/`default_to`: 14 dias UTC até o último erro (ou o último evento, ou hoje) |
+| `/api/v1/applications`, `/environments`, `/sources` | — | `{"items":[...]}`, sem paginação |
+
+- `from`/`to`: RFC3339 ou `YYYY-MM-DD` (em `to`, o dia inteiro), como na CLI.
+- Validação estrita, sem a tolerância da ingestão: parâmetro inválido, desconhecido (`severty=`) ou repetido → `400`. Valor vazio (`severity=`) conta como ausente. `application_id` válido mas inexistente → lista vazia.
+- **Paginação por cursor:** repita a consulta com `cursor=<next_cursor>` e os mesmos filtros; `next_cursor: null` é a última página. O cursor é opaco (base64url de `occurred_at` + `id`), não é assinado e não é amarrado aos filtros. Eventos novos não deslocam as páginas; um evento importado com `occurred_at` antigo pode aparecer numa página ainda não visitada.
+
+| Status | `code` | Quando |
+|--------|--------|--------|
+| `400` | `invalid_parameter` | Valor inválido ou fora da faixa, `from` depois de `to`, período acima de 366 dias, obrigatório ausente, parâmetro desconhecido ou repetido. `field` diz qual. |
+| `400` | `invalid_cursor` | Cursor malformado. |
+| `404` | `not_found` | Evento inexistente ou caminho desconhecido sob `/api/`. |
+| `405` | `method_not_allowed` | Método diferente de `GET`/`HEAD`. |
+| `500` | `internal` | Falha interna; o detalhe vai só para o log. |
+
+Saída real, com `examples/logs/` importado e o evento `demo-0001` enviado (servidor em `127.0.0.1:18093`):
+
+```text
+$ curl -s 'http://127.0.0.1:18093/api/v1/events?severity=fatal&limit=1'
+{"items":[{"id":"6979add7-40b6-4e11-9278-74851c22338c","external_id":"file:07ea4b6dc45822c1c7b1d43f239d99ca","occurred_at":"2026-03-10T14:47:00Z","received_at":"2026-11-23T21:39:54.843988Z","created_at":"2026-11-23T21:39:54.845594Z","severity":"fatal","category":"system","message":"order worker crashed: connection pool exhausted","normalization_status":"normalized","ingestion_channel":"file","trace_id":"5e669c5a5f102153","correlation_id":null,"application_id":"ff55e541-ea48-48a4-8f91-649a36bfd8b7","environment_id":"113c0027-4e23-4f9e-b191-540d051c5061","source_id":"f495f939-d088-4e42-a603-2fd08992ed20"}],"next_cursor":null}
+[HTTP 200]
+
+$ curl -s 'http://127.0.0.1:18093/api/v1/metrics/error-frequency?from=2026-03-01&to=2026-03-04'
+{"from":"2026-03-01","to":"2026-03-04","days":[{"date":"2026-03-01","errors":2,"fatal":0,"total":2},{"date":"2026-03-02","errors":2,"fatal":0,"total":2},{"date":"2026-03-03","errors":1,"fatal":0,"total":1},{"date":"2026-03-04","errors":0,"fatal":0,"total":0}]}
+[HTTP 200]
+
+$ curl -s 'http://127.0.0.1:18093/api/v1/metrics/severity-counts?from=2026-03-01&to=2026-03-14'
+{"counts":{"debug":0,"info":266,"warn":73,"error":39,"fatal":1},"total":379}
+[HTTP 200]
+
+$ curl -s 'http://127.0.0.1:18093/api/v1/metrics/data-range'
+{"first_occurred_at":"2026-03-01T08:46:09Z","last_occurred_at":"2026-11-23T21:39:55.478686Z","last_error_at":"2026-03-14T18:00:00Z","default_from":"2026-03-01","default_to":"2026-03-14"}
+[HTTP 200]
+
+$ curl -s 'http://127.0.0.1:18093/api/v1/events?limit=201'
+{"error":"limit must be an integer between 1 and 200","code":"invalid_parameter","field":"limit"}
+[HTTP 400]
+
+$ curl -s 'http://127.0.0.1:18093/api/v1/events?severty=error'
+{"error":"unknown parameter \"severty\"","code":"invalid_parameter","field":"severty"}
+[HTTP 400]
+
+$ curl -s 'http://127.0.0.1:18093/api/v1/events?cursor=abc'
+{"error":"cursor is malformed","code":"invalid_cursor","field":"cursor"}
+[HTTP 400]
+
+$ curl -s 'http://127.0.0.1:18093/api/v1/events/ffffffff-ffff-4fff-bfff-ffffffffffff'
+{"error":"event not found","code":"not_found"}
+[HTTP 404]
+```
+
+Respostas de referência de cada rota, usadas nos testes do handler e destinadas aos mocks do front: [`internal/adapters/http/testdata/api/`](../internal/adapters/http/testdata/api/). Para regravá-las depois de uma mudança consciente de contrato: `go test ./internal/adapters/http/ -run ReadAPIFixtures -update`.
+
+**Desempenho medido** (fase 2 da trilha 2, `loggen -scale 200`, 80.266 eventos, cache quente, com a migration 000004): primeira página e página profunda por cursor ~0,2 ms; `severity=error` 0,2–0,4 ms (11–13 ms antes do índice); frequência de erros 3–5 ms; contagem por severidade 14–26 ms (31–43 ms antes); detalhe por id 0,05 ms. Detalhes e método no `PROGRESS.md`.
 
 ### 5.2 CLI
 
@@ -353,7 +425,7 @@ Tabelas (nomes no singular), de `migrations/`:
 | `technical_event` | `id`, `external_id`, `occurred_at`, `received_at`, `message`, `severity`, `category`, `payload` (JSONB), `trace_id`, `correlation_id`, `raw_line`, `normalization_status`, `parse_error`, `ingestion_channel`, `application_id`, `source_id`, `environment_id`, `created_at` | FKs para as três tabelas acima; único parcial `(application_id, external_id)` |
 | `schema_migrations` | `version`, `applied_at` | criada pelo `tracelog migrate` |
 
-Índices de `technical_event`: `occurred_at DESC`, `severity`, `application_id`, `environment_id`, `trace_id`, `correlation_id`, `normalization_status` e o único parcial de deduplicação. Nenhum foi ajustado por medição; a fase 5 (opcional) do `PROGRESS.md` trata disso.
+Índices de `technical_event`: `occurred_at DESC`, `severity`, `(severity, occurred_at DESC, id DESC)` (000004, criado por medição na trilha 2; seção 5.1.1), `application_id`, `environment_id`, `trace_id`, `correlation_id`, `normalization_status` e o único parcial de deduplicação. O índice só de `severity` ficou redundante com o composto, mas não foi removido.
 
 Valores: `severity` ∈ `debug`, `info`, `warn`, `error`, `fatal`; `category` ∈ `application`, `system`, `security`, `audit`, `unknown`; `ingestion_channel` ∈ `http`, `file` (`cli` existe no domínio, mas nenhum comando o usa); `normalization_status` ∈ `normalized`, `partial`, `uncategorizable`.
 
@@ -372,7 +444,7 @@ tracelog/
 │   │   ├── ports/              # interfaces dos repositórios
 │   │   └── services/           # casos de uso (testes com fakes)
 │   └── adapters/
-│       ├── http/               # servidor, handler, DTOs
+│       ├── http/               # servidor, ingestão, API de leitura, DTOs, testdata/api
 │       └── repository/         # PostgreSQL (pgx/v5 via database/sql) e migrator
 ├── migrations/                 # *.sql + embed.go
 ├── tools/loggen/               # gerador do dataset
@@ -382,11 +454,10 @@ tracelog/
 └── .github/workflows/ci.yml
 ```
 
-Dependências apontam para dentro: `cmd` e `adapters/http` chamam `services`, que só conhecem `domain` e `ports`; `adapters/repository` implementa os `ports`. Dependências diretas: `github.com/jackc/pgx/v5` e `github.com/spf13/cobra`.
+Dependências apontam para dentro: `cmd` e `adapters/http` chamam `services`, que só conhecem `domain` e `ports`; `adapters/repository` implementa os `ports`. A leitura usa `TechnicalEventRepository` (com `FindByID` e cursor), `ErrorFrequencyRepository`, `EventStatsRepository` e `ReferenceDataRepository`; erros de entrada são `services.ValidationError` e evento inexistente é `ports.ErrNotFound`, que o adapter HTTP traduz em `400`/`404`. Dependências diretas: `github.com/jackc/pgx/v5` e `github.com/spf13/cobra`.
 
 **Desvios conscientes da arquitetura:**
 
-- `cmd/db.go` (`db list`) executa SQL direto no comando, sem caso de uso nem port. É só leitura de inspeção; corrigir é mover as três consultas para o repositório.
 - `cmd/migrate.go` chama `repository.Migrate` sem caso de uso: migração é infraestrutura, não regra de negócio (spec 0003).
 - Parte da saída de `init`, `serve`, `events list` e `db list` vai para stderr (`cmd.Println` do Cobra); a tabela vai para stdout. `metrics errors` e `import logs` escrevem tudo em stdout.
 
@@ -402,10 +473,10 @@ TRACELOG_TEST_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/tracelog
 
 | Pacote | Funções `Test*` | Cobre |
 |--------|-----------------|-------|
-| `internal/core/services` | 26 | Tabelas de severidade, categoria e parser; normalização, truncagem, fallback e retry; duplicata; import (linhas vazias, erros, reimportação); `init`; listagem |
-| `internal/adapters/http` | 15 | Handler com `httptest` (201, 200, 405, 413, 415, JSON inválido, contexto, erro sem vazamento, fallback), `/health`, `/ready`, shutdown |
-| `internal/adapters/repository` | 11 | 7 de integração com PostgreSQL (deduplicação, FK, filtros, `metrics` em UTC, migrate, adoção de banco legado, idempotência do setup), pool, DSN do import, erro de FK |
-| `internal/config` | 5 | Defaults, obrigatórias, `.env`, `HTTP_MAX_BODY_BYTES`, escape do DSN |
+| `internal/core/services` | 37 | Tabelas de severidade, categoria e parser; normalização, truncagem, fallback e retry; duplicata; import (linhas vazias, erros, reimportação); `init`; listagem; leitura (paginação com timestamps iguais, última página cheia, validação, dias preenchidos em UTC, período padrão) |
+| `internal/adapters/http` | 23 | Ingestão com `httptest` (201, 200, 405, 413, 415, JSON inválido, contexto, erro sem vazamento, fallback), `/health`, `/ready`, shutdown; leitura contra as fixtures de `testdata/api`, parâmetros inválidos, cursor adulterado, escape de HTML, cabeçalhos, 404/405 |
+| `internal/adapters/repository` | 17 | 13 de integração com PostgreSQL (deduplicação, FK, filtros, `metrics` em UTC, migrate, adoção de banco legado, idempotência do setup, paginação com timestamps iguais, busca por ID, agregados, referência, índice 000004), pool, DSN do import, erro de FK |
+| `internal/config` | 6 | Defaults, obrigatórias, `.env`, `HTTP_MAX_BODY_BYTES`, `HTTP_HOST`, escape do DSN |
 | `cmd` | 5 | Saídas de `metrics` e `import`, `--from`/`--to`, `init --defaults` |
 | `tools/loggen` | 2 | Determinismo e igualdade com `examples/logs` |
 
@@ -436,6 +507,7 @@ Lacuna: não há teste automatizado de ponta a ponta da CLI contra banco; a demo
 6. `--help` exige as variáveis do banco; o `.env` não aceita comentário no fim da linha.
 7. `events list` corta a mensagem em 100 bytes e pode quebrar um caractere UTF-8 no meio; `--limit` não tem teto.
 8. Migrations não têm *down*: correção é sempre uma migration nova.
+9. A API de leitura devolve tudo o que foi gravado, sem redação: dado sensível enviado por um cliente é lido por quem alcançar a porta. O bind em `127.0.0.1` é mitigação, não controle de acesso.
 
 ---
 
@@ -449,4 +521,4 @@ Na ordem do roadmap do `AGENTS.md`:
 4. MCP e busca em linguagem natural.
 5. Dashboards.
 
-Pendências do MVP: lote e `external_id` obrigatório (spec 0001, D3/D5); mover `cmd/db.go` para o repositório; saída da CLI toda em stdout; teste de ponta a ponta da CLI.
+Pendências do MVP: lote e `external_id` obrigatório (spec 0001, D3/D5); saída da CLI toda em stdout; teste de ponta a ponta da CLI.

@@ -1,0 +1,29 @@
+{
+  "id": "2b8c4d6e-3f5a-4b7c-9d0e-1f2a3b4c5d6e",
+  "external_id": null,
+  "occurred_at": "2026-03-09T08:00:00Z",
+  "received_at": "2026-03-09T08:00:00.25Z",
+  "created_at": "2026-03-09T08:00:00.251Z",
+  "severity": "info",
+  "category": "unknown",
+  "message": "\u003cscript\u003ealert(\"xss\")\u003c/script\u003e",
+  "normalization_status": "partial",
+  "ingestion_channel": "http",
+  "trace_id": null,
+  "correlation_id": null,
+  "application_id": "550e8400-e29b-41d4-a716-446655440010",
+  "environment_id": "770e8400-e29b-41d4-a716-446655440012",
+  "source_id": "660e8400-e29b-41d4-a716-446655440011",
+  "parse_error": "invalid character '\u003c' looking for beginning of value",
+  "raw_line": null,
+  "payload": {
+    "_ingestion": {
+      "decode_error": "invalid character '\u003c' looking for beginning of value",
+      "normalization_warnings": [
+        "occurred_at missing or invalid; received_at used"
+      ],
+      "raw_request_body": "\u003cimg src=x onerror=alert(1)\u003e"
+    }
+  }
+}
+

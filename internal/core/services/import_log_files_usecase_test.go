@@ -190,6 +190,10 @@ func (r *dedupRepository) FindByFilters(context.Context, ports.TechnicalEventFil
 	return nil, nil
 }
 
+func (r *dedupRepository) FindByID(context.Context, string) (domain.TechnicalEvent, error) {
+	return domain.TechnicalEvent{}, ports.ErrNotFound
+}
+
 func TestImportLogFilesUseCaseReimportDoesNotDuplicate(t *testing.T) {
 	repo := &dedupRepository{seen: map[string]bool{}}
 	registerUC := NewRegisterTechnicalEventUseCase(repo, &stubSystemSetupRepository{saved: basicSetupFixture()})

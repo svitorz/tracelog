@@ -1,0 +1,6 @@
+{
+  "error": "cursor is malformed",
+  "code": "invalid_cursor",
+  "field": "cursor"
+}
+

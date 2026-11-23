@@ -1,0 +1,12 @@
+{
+  "items": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440010",
+      "name": "Local Application",
+      "service_key": "local-app",
+      "description": null,
+      "created_at": "2026-11-23T20:38:39.101112Z"
+    }
+  ]
+}
+

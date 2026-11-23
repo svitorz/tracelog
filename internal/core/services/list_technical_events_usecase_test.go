@@ -21,6 +21,10 @@ func (r *stubListTechnicalEventRepository) FindByFilters(_ context.Context, filt
 	return []domain.TechnicalEvent{}, nil
 }
 
+func (r *stubListTechnicalEventRepository) FindByID(context.Context, string) (domain.TechnicalEvent, error) {
+	return domain.TechnicalEvent{}, ports.ErrNotFound
+}
+
 func TestListTechnicalEventsNormalizesSeverity(t *testing.T) {
 	repo := &stubListTechnicalEventRepository{}
 	uc := NewListTechnicalEventsUseCase(repo)

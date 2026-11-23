@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/). The reasoning behind each change is in [`docs/specs/`](./docs/specs/).
 
+## [Unreleased]
+
+### Added
+
+- Read-only JSON API under `/api/v1` (spec 0005): `GET /api/v1/events` with filters and cursor pagination, `GET /api/v1/events/{id}`, `GET /api/v1/metrics/error-frequency` (empty days filled, UTC), `GET /api/v1/metrics/severity-counts`, `GET /api/v1/metrics/data-range` (with a suggested default period) and `GET /api/v1/applications`, `/environments`, `/sources`.
+- Strict validation on the read API: invalid, unknown or repeated parameters answer `400` with `code` and `field`; a missing event answers `404`; unknown paths under `/api/` answer JSON `404`.
+- `HTTP_HOST` setting for the address `tracelog serve` listens on.
+- Reference responses in `internal/adapters/http/testdata/api/`, checked by the handler tests.
+- Migration `000004`: index on `(severity, occurred_at DESC, id DESC)` for severity-filtered reads (measured: filtered list from ~11 ms to ~0.3 ms, severity counts from ~35 ms to ~20 ms on 80k events). Creating it locks writes on `technical_event` while it builds (190 ms for 80k rows).
+
+### Changed
+
+- **Breaking:** `tracelog serve` listens on `127.0.0.1` by default instead of every interface, because the read API serves event payloads without authentication. Set `HTTP_HOST=0.0.0.0` to receive events from other machines. The Docker image and the Compose stack set it inside the container, so `docker compose up` behaves as before.
+- `tracelog events list` orders events with the same `occurred_at` by `id`, so the order is stable.
+- `tracelog db list` reads through the same repository port as the API (same output).
+
 ## [0.1.0] - 2026-11-21
 
 First release meant to be run by others: `cp .env.example .env && make demo` brings everything up.
@@ -56,5 +72,6 @@ First release meant to be run by others: `cp .env.example .env && make demo` bri
 
 Initial MVP on PostgreSQL: `POST /events`, `GET /health` and the commands `serve`, `init`, `events list`, `metrics errors`, `db list` and `seed` (a stub).
 
+[Unreleased]: https://github.com/svitorz/tracelog/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/svitorz/tracelog/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/svitorz/tracelog/releases/tag/v0.0.1
