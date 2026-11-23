@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/svitorz/tracelog/actions/workflows/ci.yml/badge.svg)](https://github.com/svitorz/tracelog/actions/workflows/ci.yml)
 
-TraceLog ingests technical events and log files, normalizes them and stores them in PostgreSQL, so you can ask simple questions from the command line: what failed, when, and how often. It is a small Go service with a hexagonal layout, built as an MVP: one HTTP endpoint, a log importer and a CLI.
+TraceLog ingests technical events and log files, normalizes them and stores them in PostgreSQL, so you can ask simple questions from the command line: what failed, when, and how often. It is a small Go service with a hexagonal layout, built as an MVP: an ingestion endpoint, a read-only JSON API, a log importer and a CLI.
 
 ## Quickstart
 
@@ -86,7 +86,7 @@ $ curl -X POST http://127.0.0.1:18083/events   # reenvio do mesmo external_id
 [HTTP 200]
 ```
 
-Every field is optional. Missing or invalid values are normalized and the change is recorded in `payload._ingestion`; references (`application_id`, `source_id`, `environment_id`) fall back to the default setup. The API answers `413` for bodies over `HTTP_MAX_BODY_BYTES` (1 MiB by default), `415` for a `Content-Type` other than JSON and `500` with a generic message (details only in the server log). `GET /health` is liveness; `GET /ready` checks the database.
+Every field is optional. Missing or invalid values are normalized and the change is recorded in `payload._ingestion`; references (`application_id`, `source_id`, `environment_id`) fall back to the default setup. The API answers `413` for bodies over `HTTP_MAX_BODY_BYTES` (1 MiB by default), `415` for a `Content-Type` other than JSON and `500` with a generic message (details only in the server log). `GET /health` is liveness; `GET /ready` checks the database. A read-only JSON API under `/api/v1` lists events with cursor pagination, returns one event and serves error frequency, severity counts and reference data; its contract is in the [project guide, section 5.1.1](./docs/guia-do-projeto.md#511-api-de-leitura-spec-0005).
 
 ## Command line
 
@@ -104,7 +104,7 @@ Every field is optional. Missing or invalid values are normalized and the change
 
 ```mermaid
 flowchart LR
-    client["HTTP client"] -->|"POST /events"| http["adapters/http"]
+    client["HTTP client"] -->|"POST /events, GET /api/v1/*"| http["adapters/http"]
     operator["Operator"] --> cmd["cmd (Cobra CLI)"]
 
     subgraph core["internal/core"]
@@ -113,10 +113,13 @@ flowchart LR
         list["ListTechnicalEvents"]
         freq["GetErrorFrequency"]
         setup["InitializeSystem / EnsureSystemSetup"]
-        ports[["ports: TechnicalEventRepository, ErrorFrequencyRepository, SystemSetupRepository"]]
+        read["read use cases: ListEventsPage, GetTechnicalEvent, DailyErrorFrequency, SeverityCounts, DataRange, ListReferenceData"]
+        ports[["ports: TechnicalEventRepository, ErrorFrequencyRepository, EventStatsRepository, ReferenceDataRepository, SystemSetupRepository"]]
     end
 
     http --> register
+    http --> read
+    cmd -->|"db list"| read
     cmd --> importuc
     importuc --> register
     cmd --> list
@@ -126,18 +129,19 @@ flowchart LR
     list --> ports
     freq --> ports
     setup --> ports
+    read --> ports
 
     repo["adapters/repository (pgx)"] -.->|implements| ports
-    cmd -.->|"migrate, db list: direct"| repo
+    cmd -.->|"migrate: direct"| repo
     repo --> pg[("PostgreSQL")]
 ```
 
-Use cases depend only on the domain and on the port interfaces; the PostgreSQL adapter implements the ports. Two commands skip the use-case layer on purpose: `migrate` (infrastructure, not business logic) and `db list`, which still runs its three read-only queries directly in `cmd/db.go`.
+Use cases depend only on the domain and on the port interfaces; the PostgreSQL adapter implements the ports. One command skips the use-case layer on purpose: `migrate` (infrastructure, not business logic).
 
 ## What it does not do
 
 - No dashboard or web UI.
-- No authentication, TLS or rate limiting: the Docker setup publishes ports on `127.0.0.1` only and uses a default database password. Do not expose it.
+- No authentication, TLS or rate limiting: anyone who reaches the port can write events and read all of them, including payloads, with no redaction of sensitive data. `tracelog serve` listens on `127.0.0.1` by default (`HTTP_HOST`), the Docker setup publishes ports on `127.0.0.1` only and uses a default database password. Do not expose it.
 - No search, grouping by fingerprint, alerting or per-`trace_id` view yet.
 - No batch endpoint: one event per `POST /events`.
 
