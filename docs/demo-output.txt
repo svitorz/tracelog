@@ -1,0 +1,61 @@
+
+$ docker compose up -d --wait
+SERVICE    STATUS
+api        Up 5 seconds (healthy)
+init       Exited (0) 5 seconds ago
+migrate    Exited (0) 6 seconds ago
+postgres   Up 12 seconds (healthy)
+
+$ tracelog import logs --file /examples/checkout-api.log --file /examples/auth-service.log --file /examples/legacy-gateway.log
+Log import summary
+Files processed: 3
+Lines read: 434
+Persisted: 429
+Duplicates (already imported): 0
+Blank lines skipped: 5
+Normalized: 378
+Partially interpreted: 20
+Uncategorizable: 31
+
+$ curl -X POST http://127.0.0.1:18083/events   # evento novo
+{"id":"7a6206f0-bff1-4099-b85c-8746b5a0dee9","external_id":"demo-0001","received_at":"2026-11-20T20:58:24.671741Z","created_at":"2026-11-20T20:58:24.674644Z","duplicate":false}
+
+[HTTP 201]
+
+$ curl -X POST http://127.0.0.1:18083/events   # reenvio do mesmo external_id
+{"id":"7a6206f0-bff1-4099-b85c-8746b5a0dee9","external_id":"demo-0001","received_at":"2026-11-20T20:58:24.671741Z","created_at":"2026-11-20T20:58:24.674644Z","duplicate":true}
+
+[HTTP 200]
+
+$ curl -X POST http://127.0.0.1:18083/events   # Content-Type que não é JSON
+{"error":"Content-Type must be application/json"}
+
+[HTTP 415]
+
+$ tracelog events list --severity fatal --from 2026-03-01 --to 2026-03-14
+
+Total: 1 event(s).
+OCCURRED_AT           SEVERITY  APPLICATION_ID                        ENVIRONMENT_ID                        MESSAGE
+-----------           --------  --------------                        --------------                        -------
+2026-03-10T14:47:00Z  fatal     192524eb-8a13-4ac4-afe1-42850aa716a5  6b6eae04-cf16-4999-9ec5-b805528e905b  order worker crashed: connection pool exhausted
+
+$ tracelog metrics errors --from 2026-03-01 --to 2026-03-14
+DATE        ERRORS  FATAL  TOTAL
+----        ------  -----  -----
+2026-03-01  2       0      2
+2026-03-02  2       0      2
+2026-03-03  1       0      1
+2026-03-05  1       0      1
+2026-03-06  1       0      1
+2026-03-08  1       0      1
+2026-03-09  2       0      2
+2026-03-10  25      1      26
+2026-03-11  1       0      1
+2026-03-13  1       0      1
+2026-03-14  2       0      2
+
+Summary:
+  Days with errors: 11
+  Errors: 39
+  Fatal: 1
+  Average (error+fatal) per day with errors: 3.6

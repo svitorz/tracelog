@@ -60,3 +60,18 @@ jobs:
 
       - name: go build
         run: go build -o bin/tracelog .
+
+  image:
+    name: docker build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: docker build
+        run: docker build -t tracelog:ci .
+
+      - name: run as non-root
+        run: test "$(docker run --rm --entrypoint id tracelog:ci -u)" = "10001"

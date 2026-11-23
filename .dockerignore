@@ -1,0 +1,16 @@
+# Segredos e configuração local nunca entram no contexto de build.
+.env
+.env.*
+!.env.example
+
+.git
+.github
+bin/
+dist/
+*.out
+coverage.*
+*.log
+.idea/
+.vscode/
+Dockerfile
+docker-compose.yml

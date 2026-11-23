@@ -1,0 +1,212 @@
+{"level":"info","message":"order shipped","order_id":"ord-492444","timestamp":"2026-03-01T08:46:09Z","trace_id":"31d0664c5a15d187","user":"user-0055"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-01T08:56:49Z","trace_id":"b017af0ff41c1ea5"}
+{"amount_cents":41334,"level":"info","message":"order placed","order_id":"ord-025663","timestamp":"2026-03-01T11:02:35Z","trace_id":"ef6399a5410780d4","user":"user-0009"}
+{"amount_cents":7567,"level":"info","message":"order placed","order_id":"ord-297141","timestamp":"2026-03-01T11:38:46Z","trace_id":"4a7bfa680d563060","user":"user-0060"}
+{"amount_cents":15756,"level":"info","message":"order placed","order_id":"ord-171773","timestamp":"2026-03-01T11:45:45Z","trace_id":"8e0b533387b41634","user":"user-0026"}
+{"level":"info","message":"order shipped","order_id":"ord-731153","timestamp":"2026-03-01T13:49:50Z","trace_id":"273a1db5029ba872","user":"user-0052"}
+{"level":"info","message":"payment authorized","order_id":"ord-133578","timestamp":"2026-03-01T15:05:37Z","trace_id":"a5568c75209ff267","user":"user-0036"}
+{"amount_cents":49309,"level":"info","message":"order placed","order_id":"ord-986397","timestamp":"2026-03-01T16:10:45Z","trace_id":"cdfbb9dcdf056742","user":"user-0030"}
+{"amount_cents":24166,"level":"info","message":"order placed","order_id":"ord-478739","timestamp":"2026-03-01T17:22:55Z","trace_id":"f2c8f9f3d3dd3f6a","user":"user-0033"}
+{"amount_cents":14317,"level":"info","message":"order placed","order_id":"ord-453121","timestamp":"2026-03-01T17:25:32Z","trace_id":"3c38ceb8c3cff1a4","user":"user-0045"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-01T17:48:31Z","trace_id":"567b1c4989a85d1c"}
+{"duration_ms":2995,"level":"warn","message":"slow query detected","timestamp":"2026-03-01T18:12:34Z","trace_id":"dadf6845f0ce3fa0","user":"user-0003"}
+{"amount_cents":27008,"level":"info","message":"order placed","order_id":"ord-288241","timestamp":"2026-03-01T18:32:41Z","trace_id":"33c6996b10026ecd","user":"user-0042"}
+{"level":"info","message":"payment authorized","order_id":"ord-703310","timestamp":"2026-03-01T18:52:16Z","trace_id":"7cd600c431ffbb53","user":"user-0034"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-02T08:07:34Z","trace_id":"8326ec916089cbb0"}
+{"amount_cents":34748,"level":"info","message":"order placed","order_id":"ord-118569","timestamp":"2026-03-02T09:53:02Z","trace_id":"2da664ce679dbff3","user":"user-0020"}
+{"amount_cents":31843,"level":"info","message":"order placed","order_id":"ord-994986","timestamp":"2026-03-02T10:34:21Z","trace_id":"bde0d82bf999a27e","user":"user-0026"}
+{"amount_cents":28948,"level":"info","message":"order placed","order_id":"ord-382315","timestamp":"2026-03-02T12:33:11Z","trace_id":"660b207849e49cba","user":"user-0044"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-02T12:41:18Z","trace_id":"b37fa9cf017bc791"}
+{"level":"info","message":"payment authorized","order_id":"ord-122171","timestamp":"2026-03-02T13:34:11Z","trace_id":"3a44605b82e1273c","user":"user-0034"}
+{"amount_cents":42671,"level":"info","message":"order placed","order_id":"ord-025869","timestamp":"2026-03-02T14:04:27Z","trace_id":"2c260617f72bcad9","user":"user-0052"}
+{"level":"info","message":"payment authorized","order_id":"ord-154882","timestamp":"2026-03-02T14:35:38Z","trace_id":"3da846f7da5d3652","user":"user-0047"}
+{"amount_cents":3434,"level":"info","message":"order placed","order_id":"ord-381740","timestamp":"2026-03-02T15:08:44Z","trace_id":"9ef5adacc6925711","user":"user-0033"}
+{"amount_cents":41848,"level":"info","message":"order placed","order_id":"ord-676047","timestamp":"2026-03-02T16:16:14Z","trace_id":"badcfb2d9aa4c093","user":"user-0032"}
+{"level":"info","message":"order shipped","order_id":"ord-681188","timestamp":"2026-03-02T18:24:05Z","trace_id":"565e883889387453","user":"user-0025"}
+{"amount_cents":26304,"level":"info","message":"order placed","order_id":"ord-677146","timestamp":"2026-03-02T18:24:10Z","trace_id":"7ec6473c407d4021","user":"user-0001"}
+{"amount_cents":5175,"level":"info","message":"order placed","order_id":"ord-369732","timestamp":"2026-03-02T18:29:39Z","trace_id":"a71a6ade5e2fda85","user":"user-0023"}
+{"amount_cents":5167,"level":"info","message":"order placed","order_id":"ord-096672","timestamp":"2026-03-02T19:51:17Z","trace_id":"6928729ff43ede29","user":"user-0026"}
+{"entries":375,"level":"info","message":"cache warmed"}
+{"amount_cents":6898,"level":"info","message":"order placed","order_id":"ord-407624","timestamp":"2026-03-03T08:10:53Z","trace_id":"da8f5598fbba82ee","user":"user-0021"}
+{"level":"info","message":"order placed","order_id
+{"level":"info","message":"payment authorized","order_id":"ord-179388","timestamp":"2026-03-03T09:03:48Z","trace_id":"209fdc0f7cca4b41","user":"user-0009"}
+{"level":"info","message":"payment authorized","order_id":"ord-278723","timestamp":"2026-03-03T09:06:07Z","trace_id":"4ae90d33fa3d3d3a","user":"user-0003"}
+{"level":"warn","message":"retrying payment provider request","retry_count":1,"timestamp":"2026-03-03T09:28:46Z","trace_id":"1b4f546168dd8075","user":"user-0012"}
+{"amount_cents":16760,"level":"info","message":"order placed","order_id":"ord-904642","timestamp":"2026-03-03T10:50:59Z","trace_id":"9285495fd20c22b9","user":"user-0051"}
+{"level":"info","message":"payment authorized","order_id":"ord-028166","timestamp":"2026-03-03T11:58:48Z","trace_id":"526807a58696c773","user":"user-0060"}
+{"level":"info","message":"payment authorized","order_id":"ord-643364","timestamp":"2026-03-03T13:18:28Z","trace_id":"937f078389b8b51b","user":"user-0025"}
+{"level":"info","message":"payment authorized","order_id":"ord-478283","timestamp":"2026-03-03T13:53:18Z","trace_id":"9ea7b130fd90ef74","user":"user-0026"}
+{"level":"info","message":"payment authorized","order_id":"ord-183849","timestamp":"2026-03-03T14:37:19Z","trace_id":"588d70ca0309ea4d","user":"user-0045"}
+{"amount_cents":40919,"level":"info","message":"order placed","order_id":"ord-589227","timestamp":"2026-03-03T16:08:56Z","trace_id":"e5f75e24286e9824","user":"user-0059"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-03T16:56:34Z","trace_id":"bc39ba14b4236681"}
+{"level":"info","message":"payment authorized","order_id":"ord-861970","timestamp":"2026-03-03T17:41:35Z","trace_id":"d19e0ea3038be437","user":"user-0004"}
+{"level":"info","message":"payment authorized","order_id":"ord-808950","timestamp":"2026-03-03T18:36:19Z","trace_id":"57e0671c5508f423","user":"user-0011"}
+{"level":"info","message":"payment authorized","order_id":"ord-288606","timestamp":"2026-03-04T08:03:15Z","trace_id":"0bc91f1e826bb783","user":"user-0029"}
+{"level":"warn","message":"retrying payment provider request","retry_count":1,"timestamp":"2026-03-04T08:52:04Z","trace_id":"0533020ca6112dca","user":"user-0021"}
+{"amount_cents":24160,"level":"info","message":"order placed","order_id":"ord-949188","timestamp":"2026-03-04T09:16:34Z","trace_id":"ac1dca28bedc6618","user":"user-0050"}
+{"amount_cents":9155,"level":"info","message":"order placed","order_id":"ord-235116","timestamp":"2026-03-04T09:53:30Z","trace_id":"3d32e3ff832accd7","user":"user-0043"}
+{"amount_cents":49090,"level":"info","message":"order placed","order_id":"ord-718944","timestamp":"2026-03-04T11:13:26Z","trace_id":"184e575605bc020d","user":"user-0003"}
+{"amount_cents":1326,"level":"info","message":"order placed","order_id":"ord-087481","timestamp":"2026-03-04T12:19:00Z","trace_id":"920b1029a5734eec","user":"user-0043"}
+{"amount_cents":6842,"level":"info","message":"order placed","order_id":"ord-336303","timestamp":"2026-03-04T13:53:22Z","trace_id":"1e367384f41c0909","user":"user-0032"}
+{"amount_cents":34561,"level":"info","message":"order placed","order_id":"ord-548384","timestamp":"2026-03-04T13:56:41Z","trace_id":"bc1aa624905c9660","user":"user-0043"}
+{"level":"info","message":"payment authorized","order_id":"ord-032158","timestamp":"2026-03-04T14:56:46Z","trace_id":"d6d9050be2cd0d52","user":"user-0040"}
+{"amount_cents":27900,"level":"info","message":"order placed","order_id":"ord-154376","timestamp":"2026-03-04T15:24:37Z","trace_id":"6a576c3c642a8eec","user":"user-0029"}
+{"amount_cents":2475,"level":"info","message":"order placed","order_id":"ord-738492","timestamp":"2026-03-04T17:22:08Z","trace_id":"afcaeb0a70c23887","user":"user-0011"}
+{"duration_ms":941,"level":"warn","message":"slow query detected","timestamp":"2026-03-04T18:53:11Z","trace_id":"86d536e0b35edf0b","user":"user-0009"}
+{"amount_cents":27179,"level":"info","message":"order placed","order_id":"ord-188485","timestamp":"2026-03-05T08:37:08Z","trace_id":"d9d23f93938c20c7","user":"user-0002"}
+{"level":"info","message":"payment authorized","order_id":"ord-945686","timestamp":"2026-03-05T08:40:05Z","trace_id":"ea5dd687553bc6c8","user":"user-0010"}
+{"level":"info","message":"payment authorized","order_id":"ord-417252","timestamp":"2026-03-05T11:11:14Z","trace_id":"5cf941ab70578d85","user":"user-0026"}
+{"level":"info","message":"payment authorized","order_id":"ord-867609","timestamp":"2026-03-05T11:27:26Z","trace_id":"ee3a954eb9960cb5","user":"user-0056"}
+{"level":"info","message":"payment authorized","order_id":"ord-242151","timestamp":"2026-03-05T11:30:11Z","trace_id":"7c3bfb84e08571c0","user":"user-0050"}
+{"level":"info","message":"order shipped","order_id":"ord-359230","timestamp":"2026-03-05T13:24:55Z","trace_id":"c5b86b27d2881e44","user":"user-0005"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-05T14:48:26Z","trace_id":"164f81d9d55b2e27"}
+{"duration_ms":1359,"level":"warn","message":"slow query detected","timestamp":"2026-03-05T15:15:41Z","trace_id":"4c2431e53e3de10a","user":"user-0026"}
+{"amount_cents":24834,"level":"info","message":"order placed","order_id":"ord-977468","timestamp":"2026-03-05T15:54:46Z","trace_id":"3c5665c442752f09","user":"user-0043"}
+{"level":"info","message":"payment authorized","order_id":"ord-489532","timestamp":"2026-03-05T16:42:51Z","trace_id":"01a6aad6dcedeb97","user":"user-0042"}
+{"level":"info","message":"order shipped","order_id":"ord-776970","timestamp":"2026-03-05T17:27:30Z","trace_id":"3b58398fe0f93cae","user":"user-0025"}
+{"amount_cents":27974,"level":"info","message":"order placed","order_id":"ord-406323","timestamp":"2026-03-05T18:28:47Z","trace_id":"686441ca5e06bd25","user":"user-0023"}
+{"amount_cents":32662,"level":"info","message":"order placed","order_id":"ord-116456","timestamp":"2026-03-05T19:22:22Z","trace_id":"b1f3d8190c4ef44f","user":"user-0049"}
+{"amount_cents":37132,"level":"info","message":"order placed","order_id":"ord-397760","timestamp":"2026-03-06T08:34:26Z","trace_id":"04fdd0980f66aef8","user":"user-0056"}
+{"level":"info","message":"order shipped","order_id":"ord-197485","timestamp":"2026-03-06T09:00:52Z","trace_id":"1378b13f1056a0b2","user":"user-0049"}
+{"amount_cents":22561,"level":"info","message":"order placed","order_id":"ord-892114","timestamp":"2026-03-06T10:59:21Z","trace_id":"21b0d3c9971923a7","user":"user-0010"}
+{"amount_cents":17324,"level":"info","message":"order placed","order_id":"ord-587423","timestamp":"2026-03-06T12:27:17Z","trace_id":"2624888458cfee27","user":"user-0035"}
+{"level":"info","message":"order shipped","order_id":"ord-873453","timestamp":"2026-03-06T13:26:53Z","trace_id":"1f4ce7b023428824","user":"user-0038"}
+{"level":"info","message":"order shipped","order_id":"ord-424701","timestamp":"2026-03-06T15:42:58Z","trace_id":"678373e1b7f43d6f","user":"user-0014"}
+{"level":"info","message":"payment authorized","order_id":"ord-021442","timestamp":"2026-03-06T15:57:41Z","trace_id":"c509d44aef49e43b","user":"user-0059"}
+{"duration_ms":2427,"level":"warn","message":"slow query detected","timestamp":"2026-03-06T16:56:37Z","trace_id":"6442efbea95455cb","user":"user-0051"}
+{"amount_cents":23068,"level":"info","message":"order placed","order_id":"ord-028873","timestamp":"2026-03-06T17:22:15Z","trace_id":"1b8a3f0ce7258234","user":"user-0042"}
+{"amount_cents":24096,"level":"info","message":"order placed","order_id":"ord-775630","timestamp":"2026-03-06T18:12:40Z","trace_id":"535ee89fc38ac936","user":"user-0008"}
+{"amount_cents":14118,"level":"info","message":"order placed","order_id":"ord-393585","timestamp":"2026-03-06T19:23:40Z","trace_id":"a7e6de7f135df312","user":"user-0034"}
+{"level":"info","message":"order shipped","order_id":"ord-043347","timestamp":"2026-03-06T19:30:23Z","trace_id":"605fa2f151abc1c8","user":"user-0007"}
+{"level":"info","message":"payment authorized","order_id":"ord-133075","timestamp":"2026-03-07T08:11:42Z","trace_id":"93035098153124f0","user":"user-0026"}
+{"level":"info","message":"payment authorized","order_id":"ord-379848","timestamp":"2026-03-07T08:47:06Z","trace_id":"3bcae9edba693250","user":"user-0040"}
+{"amount_cents":24899,"level":"info","message":"order placed","order_id":"ord-561956","timestamp":"2026-03-07T09:54:18Z","trace_id":"b895364debcd6615","user":"user-0045"}
+{"amount_cents":35587,"level":"info","message":"order placed","order_id":"ord-552104","timestamp":"2026-03-07T11:52:03Z","trace_id":"55b06ca73faffe2b","user":"user-0001"}
+{"level":"info","message":"payment authorized","order_id":"ord-514823","timestamp":"2026-03-07T12:41:26Z","trace_id":"3612492a42591030","user":"user-0012"}
+{"amount_cents":20231,"level":"info","message":"order placed","order_id":"ord-036719","timestamp":"2026-03-07T13:01:02Z","trace_id":"17b0a1941021c749","user":"user-0054"}
+{"amount_cents":37394,"level":"info","message":"order placed","order_id":"ord-835121","timestamp":"2026-03-07T13:08:37Z","trace_id":"6c4231a9897547a7","user":"user-0057"}
+{"level":"info","message":"payment authorized","order_id":"ord-370217","timestamp":"2026-03-07T13:23:19Z","trace_id":"3e5a1b4c30bab90f","user":"user-0004"}
+{"level":"info","message":"order shipped","order_id":"ord-131104","timestamp":"2026-03-07T13:53:52Z","trace_id":"030618824e08914d","user":"user-0016"}
+{"level":"info","message":"order placed","order_id
+{"level":"info","message":"order shipped","order_id":"ord-285019","timestamp":"2026-03-07T16:39:38Z","trace_id":"1f58e32f613d6ba9","user":"user-0023"}
+{"level":"info","message":"payment authorized","order_id":"ord-772556","timestamp":"2026-03-07T16:54:24Z","trace_id":"ef797ebddb359d2d","user":"user-0033"}
+{"amount_cents":36837,"level":"info","message":"order placed","order_id":"ord-761103","timestamp":"2026-03-07T19:36:27Z","trace_id":"c40eba5fd47a3f29","user":"user-0011"}
+{"entries":493,"level":"info","message":"cache warmed"}
+{"level":"info","message":"payment authorized","order_id":"ord-981806","timestamp":"2026-03-08T08:30:00Z","trace_id":"d4262c6aba88dfa9","user":"user-0029"}
+{"duration_ms":1879,"level":"warn","message":"slow query detected","timestamp":"2026-03-08T09:38:30Z","trace_id":"7dc947fd8fca2ee5","user":"user-0058"}
+{"level":"info","message":"payment authorized","order_id":"ord-148280","timestamp":"2026-03-08T12:21:21Z","trace_id":"179259b6ec61fd0f","user":"user-0044"}
+{"amount_cents":16850,"level":"info","message":"order placed","order_id":"ord-881213","timestamp":"2026-03-08T12:31:04Z","trace_id":"a0b7343dc9c90fc0","user":"user-0002"}
+{"amount_cents":40420,"level":"info","message":"order placed","order_id":"ord-924640","timestamp":"2026-03-08T13:33:57Z","trace_id":"5315edcab2978d26","user":"user-0023"}
+{"duration_ms":1109,"level":"warn","message":"slow query detected","timestamp":"2026-03-08T13:36:02Z","trace_id":"3afbed691d8427ee","user":"user-0008"}
+{"amount_cents":42236,"level":"info","message":"order placed","order_id":"ord-458142","timestamp":"2026-03-08T14:46:11Z","trace_id":"f86cbb37048ed18d","user":"user-0025"}
+{"duration_ms":2423,"level":"warn","message":"slow query detected","timestamp":"2026-03-08T17:04:43Z","trace_id":"fbf7aa49d7f8fd29","user":"user-0032"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-08T17:43:55Z","trace_id":"0181def9043594d1"}
+{"amount_cents":8228,"level":"info","message":"order placed","order_id":"ord-564934","timestamp":"2026-03-08T17:49:03Z","trace_id":"5b41b49609c3f0e3","user":"user-0017"}
+{"amount_cents":1888,"level":"info","message":"order placed","order_id":"ord-691124","timestamp":"2026-03-08T18:14:00Z","trace_id":"f8e6dd6eb49fa4b9","user":"user-0030"}
+{"level":"info","message":"payment authorized","order_id":"ord-020229","timestamp":"2026-03-08T18:45:14Z","trace_id":"86be9641db494c7f","user":"user-0047"}
+{"amount_cents":1636,"level":"info","message":"order placed","order_id":"ord-586157","timestamp":"2026-03-08T19:19:40Z","trace_id":"4a8a50b2804a67b3","user":"user-0032"}
+{"amount_cents":9974,"level":"info","message":"order placed","order_id":"ord-489695","timestamp":"2026-03-09T08:10:47Z","trace_id":"ae8ad41abdb9ee46","user":"user-0055"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-09T08:53:36Z","trace_id":"9c04eb49e2273396"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-09T09:26:03Z","trace_id":"ac86af17e61b16cd"}
+{"level":"info","message":"payment authorized","order_id":"ord-104811","timestamp":"2026-03-09T10:08:32Z","trace_id":"77d0775407b9ee16","user":"user-0002"}
+{"level":"info","message":"order shipped","order_id":"ord-309594","timestamp":"2026-03-09T10:19:06Z","trace_id":"38ca1488b2ec507e","user":"user-0006"}
+{"amount_cents":31440,"level":"info","message":"order placed","order_id":"ord-999541","timestamp":"2026-03-09T10:21:20Z","trace_id":"d20c5b5271824b25","user":"user-0046"}
+{"level":"info","message":"payment authorized","order_id":"ord-502425","timestamp":"2026-03-09T11:50:10Z","trace_id":"0fe3c1edfea2b87d","user":"user-0008"}
+{"level":"info","message":"order shipped","order_id":"ord-235278","timestamp":"2026-03-09T14:09:35Z","trace_id":"ad914bcb87950d9a","user":"user-0056"}
+{"amount_cents":9123,"level":"info","message":"order placed","order_id":"ord-602383","timestamp":"2026-03-09T14:57:27Z","trace_id":"a4c861d312ac9f82","user":"user-0045"}
+{"level":"info","message":"payment authorized","order_id":"ord-749848","timestamp":"2026-03-09T15:48:44Z","trace_id":"49d26df782adfadf","user":"user-0049"}
+{"level":"info","message":"payment authorized","order_id":"ord-725634","timestamp":"2026-03-09T16:21:12Z","trace_id":"3e2bd3e3b25a099a","user":"user-0027"}
+{"level":"info","message":"order shipped","order_id":"ord-662584","timestamp":"2026-03-09T16:35:42Z","trace_id":"6c7cb361cfbd2470","user":"user-0025"}
+{"amount_cents":29642,"level":"info","message":"order placed","order_id":"ord-240212","timestamp":"2026-03-09T18:00:37Z","trace_id":"8908acb57933b0e4","user":"user-0013"}
+{"amount_cents":7538,"level":"info","message":"order placed","order_id":"ord-691131","timestamp":"2026-03-09T18:58:03Z","trace_id":"c306b70be371c7ac","user":"user-0045"}
+{"level":"info","message":"payment authorized","order_id":"ord-342898","timestamp":"2026-03-10T09:12:43Z","trace_id":"a3ff4a2f70b9199e","user":"user-0046"}
+{"amount_cents":26432,"level":"info","message":"order placed","order_id":"ord-583135","timestamp":"2026-03-10T09:13:10Z","trace_id":"d6cae21090ef4e06","user":"user-0036"}
+{"level":"info","message":"payment authorized","order_id":"ord-319262","timestamp":"2026-03-10T09:59:18Z","trace_id":"14e3536bf52ce81c","user":"user-0005"}
+{"amount_cents":15748,"level":"info","message":"order placed","order_id":"ord-609094","timestamp":"2026-03-10T10:59:02Z","trace_id":"f15bc4c7f2f98c3d","user":"user-0043"}
+{"level":"info","message":"payment authorized","order_id":"ord-288230","timestamp":"2026-03-10T11:35:40Z","trace_id":"6444ce4731bfcce3","user":"user-0017"}
+{"level":"info","message":"payment authorized","order_id":"ord-009689","timestamp":"2026-03-10T12:45:28Z","trace_id":"b9308bbf4d5ca81c","user":"user-0043"}
+{"level":"info","message":"payment authorized","order_id":"ord-932906","timestamp":"2026-03-10T13:42:23Z","trace_id":"e0a3579842fe976d","user":"user-0020"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:00:33Z","trace_id":"97ae591799318980"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:02:01Z","trace_id":"a687c07a806e849c"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:02:16Z","trace_id":"b00d0b8fdd5724ca"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:07:25Z","trace_id":"c3af1c99b3d6bcce"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:10:44Z","trace_id":"95af9ea3a61bb10c"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:17:56Z","trace_id":"475017b3302760c0"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:20:31Z","trace_id":"2e46566c1d54888e"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:21:54Z","trace_id":"73077f688cee4503"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:23:09Z","trace_id":"77222d8e3a5b5d45"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:25:07Z","trace_id":"f000691c7bc722b9"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:28:02Z","trace_id":"0d770806ae17b3d2"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:36:05Z","trace_id":"ae1c16df7ce86882"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:36:30Z","trace_id":"1c337b1bb5be0007"}
+{"level":"info","message":"payment authorized","order_id":"ord-618612","timestamp":"2026-03-10T14:39:19Z","trace_id":"3dae680a64922007","user":"user-0020"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:45:51Z","trace_id":"15aa9c494cbae751"}
+{"level":"fatal","message":"order worker crashed: connection pool exhausted","timestamp":"2026-03-10T14:47:00Z","trace_id":"5e669c5a5f102153"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:47:25Z","trace_id":"90a2fe73e2ff60e1"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:51:35Z","trace_id":"5fdec980ede15f8b"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T14:53:22Z","trace_id":"d2960a0da70e1053"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T15:01:59Z","trace_id":"debf390bece657e1"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T15:13:06Z","trace_id":"3b3c146ae4302327"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T15:18:33Z","trace_id":"b725037d91b18236"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T15:24:20Z","trace_id":"f8c7f4d58a6b365b"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T15:24:34Z","trace_id":"da46889e3be5a4c9"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T15:24:58Z","trace_id":"ff5cc83813c577fa"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T15:27:28Z","trace_id":"3b650b598e2866f6"}
+{"db_host":"orders-db","level":"error","message":"database connection refused","timestamp":"2026-03-10T15:27:46Z","trace_id":"a0146a0c69022548"}
+{"amount_cents":31503,"level":"info","message":"order placed","order_id":"ord-617297","timestamp":"2026-03-10T15:53:58Z","trace_id":"0dc569e0e2400a3a","user":"user-0036"}
+{"amount_cents":41433,"level":"info","message":"order placed","order_id":"ord-443994","timestamp":"2026-03-10T18:44:26Z","trace_id":"b3d14c017f286a14","user":"user-0001"}
+{"amount_cents":25402,"level":"info","message":"order placed","order_id":"ord-606216","timestamp":"2026-03-10T19:41:15Z","trace_id":"b59fec3c01acb6bc","user":"user-0030"}
+{"level":"info","message":"order shipped","order_id":"ord-509764","timestamp":"2026-03-10T19:43:39Z","trace_id":"05e8da9a432e1624","user":"user-0057"}
+{"level":"info","message":"order shipped","order_id":"ord-468600","timestamp":"2026-03-11T08:11:12Z","trace_id":"bec75ea0dcbfc11c","user":"user-0007"}
+{"amount_cents":33576,"level":"info","message":"order placed","order_id":"ord-147459","timestamp":"2026-03-11T08:49:40Z","trace_id":"2357aaa9f75f621a","user":"user-0053"}
+{"amount_cents":16900,"level":"info","message":"order placed","order_id":"ord-117806","timestamp":"2026-03-11T09:10:21Z","trace_id":"11bfc541a58378bf","user":"user-0028"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-11T09:34:57Z","trace_id":"1876f70711601717"}
+{"level":"info","message":"payment authorized","order_id":"ord-446046","timestamp":"2026-03-11T10:22:30Z","trace_id":"b0fba9b8564388a6","user":"user-0017"}
+{"level":"info","message":"payment authorized","order_id":"ord-661206","timestamp":"2026-03-11T11:10:50Z","trace_id":"284d97b167d50bab","user":"user-0013"}
+{"amount_cents":13813,"level":"info","message":"order placed","order_id":"ord-812910","timestamp":"2026-03-11T11:15:31Z","trace_id":"58f26f2e9ffba641","user":"user-0034"}
+{"level":"info","message":"payment authorized","order_id":"ord-724025","timestamp":"2026-03-11T11:38:01Z","trace_id":"b26922ee11880ea8","user":"user-0019"}
+{"level":"info","message":"payment authorized","order_id":"ord-111866","timestamp":"2026-03-11T13:37:13Z","trace_id":"d936c7d4604d26c1","user":"user-0007"}
+{"amount_cents":28910,"level":"info","message":"order placed","order_id":"ord-047911","timestamp":"2026-03-11T15:00:26Z","trace_id":"48f9a33ea4068f47","user":"user-0027"}
+{"level":"warn","message":"retrying payment provider request","retry_count":1,"timestamp":"2026-03-11T15:45:43Z","trace_id":"2e255f5b4ea0990e","user":"user-0058"}
+{"amount_cents":47368,"level":"info","message":"order placed","order_id":"ord-138049","timestamp":"2026-03-11T17:09:44Z","trace_id":"8549922d670d863c","user":"user-0047"}
+{"level":"info","message":"order placed","order_id
+{"level":"info","message":"order shipped","order_id":"ord-102613","timestamp":"2026-03-11T19:24:38Z","trace_id":"7b8d4fd22613b1d4","user":"user-0021"}
+{"level":"info","message":"order shipped","order_id":"ord-050488","timestamp":"2026-03-12T08:25:44Z","trace_id":"08ffdbaf0694d02f","user":"user-0051"}
+{"level":"info","message":"payment authorized","order_id":"ord-697570","timestamp":"2026-03-12T08:26:08Z","trace_id":"609305ff10277d04","user":"user-0029"}
+{"amount_cents":13415,"level":"info","message":"order placed","order_id":"ord-088682","timestamp":"2026-03-12T08:37:39Z","trace_id":"4999c5a6a51e7f72","user":"user-0006"}
+{"amount_cents":13792,"level":"info","message":"order placed","order_id":"ord-298241","timestamp":"2026-03-12T08:57:44Z","trace_id":"47f2799c0076b004","user":"user-0045"}
+{"level":"info","message":"payment authorized","order_id":"ord-882699","timestamp":"2026-03-12T09:20:31Z","trace_id":"c9b8ee15895bfdff","user":"user-0021"}
+{"amount_cents":10663,"level":"info","message":"order placed","order_id":"ord-653707","timestamp":"2026-03-12T10:20:38Z","trace_id":"29b40b3a459f9238","user":"user-0001"}
+{"level":"info","message":"payment authorized","order_id":"ord-235268","timestamp":"2026-03-12T13:08:37Z","trace_id":"1fe2176b36fd86c3","user":"user-0037"}
+{"level":"info","message":"payment authorized","order_id":"ord-886102","timestamp":"2026-03-12T13:16:07Z","trace_id":"20875c8dc1fb3561","user":"user-0024"}
+{"amount_cents":22510,"level":"info","message":"order placed","order_id":"ord-120493","timestamp":"2026-03-12T17:22:25Z","trace_id":"f3987bd74317085c","user":"user-0002"}
+{"level":"info","message":"payment authorized","order_id":"ord-795581","timestamp":"2026-03-12T18:19:01Z","trace_id":"46151b7077350d0a","user":"user-0038"}
+{"level":"info","message":"order shipped","order_id":"ord-065558","timestamp":"2026-03-12T18:44:54Z","trace_id":"5dab78d7acbbf4a4","user":"user-0057"}
+{"level":"info","message":"order shipped","order_id":"ord-275617","timestamp":"2026-03-12T19:17:50Z","trace_id":"6fa4db934ca496a6","user":"user-0054"}
+{"entries":595,"level":"info","message":"cache warmed"}
+{"amount_cents":35205,"level":"info","message":"order placed","order_id":"ord-226010","timestamp":"2026-03-13T11:27:28Z","trace_id":"2258d5426ca4b4ef","user":"user-0043"}
+{"level":"info","message":"payment authorized","order_id":"ord-250809","timestamp":"2026-03-13T11:35:42Z","trace_id":"4578f83f43721bac","user":"user-0035"}
+{"amount_cents":7120,"level":"info","message":"order placed","order_id":"ord-589902","timestamp":"2026-03-13T11:40:57Z","trace_id":"1fc512be8e7cee1e","user":"user-0041"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-13T12:23:25Z","trace_id":"e0fbea67f5596ba4"}
+{"level":"warn","message":"retrying payment provider request","retry_count":3,"timestamp":"2026-03-13T12:53:12Z","trace_id":"3e1938cfa77b6705","user":"user-0005"}
+{"level":"info","message":"payment authorized","order_id":"ord-974058","timestamp":"2026-03-13T13:44:23Z","trace_id":"4fedbbd0e2b92318","user":"user-0009"}
+{"amount_cents":15489,"level":"info","message":"order placed","order_id":"ord-063170","timestamp":"2026-03-13T13:55:18Z","trace_id":"ec04d8ac06410b72","user":"user-0006"}
+{"amount_cents":43507,"level":"info","message":"order placed","order_id":"ord-859957","timestamp":"2026-03-13T15:21:32Z","trace_id":"dd0002807903230d","user":"user-0030"}
+{"duration_ms":1168,"level":"warn","message":"slow query detected","timestamp":"2026-03-13T15:46:58Z","trace_id":"6bb3255a53e02eb9","user":"user-0029"}
+{"amount_cents":13737,"level":"info","message":"order placed","order_id":"ord-178257","timestamp":"2026-03-13T17:04:29Z","trace_id":"e15fbe36b5a6f319","user":"user-0055"}
+{"level":"info","message":"payment authorized","order_id":"ord-970679","timestamp":"2026-03-13T18:31:50Z","trace_id":"c45389a019778303","user":"user-0010"}
+{"amount_cents":26921,"level":"info","message":"order placed","order_id":"ord-487158","timestamp":"2026-03-13T18:55:05Z","trace_id":"20696a9c9bfc322b","user":"user-0054"}
+{"amount_cents":1322,"level":"info","message":"order placed","order_id":"ord-467244","timestamp":"2026-03-13T19:53:33Z","trace_id":"fcd1fc66e59c03d9","user":"user-0053"}
+{"amount_cents":3248,"level":"info","message":"order placed","order_id":"ord-287197","timestamp":"2026-03-14T09:59:47Z","trace_id":"4ca14646c4ee74c8","user":"user-0021"}
+{"level":"error","message":"payment provider timeout","provider":"acme-pay","timestamp":"2026-03-14T10:13:50Z","trace_id":"3a64e13a7a80c0d5"}
+{"level":"info","message":"payment authorized","order_id":"ord-921425","timestamp":"2026-03-14T11:49:40Z","trace_id":"735b7fa1dcb43819","user":"user-0013"}
+{"amount_cents":14542,"level":"info","message":"order placed","order_id":"ord-538892","timestamp":"2026-03-14T12:18:09Z","trace_id":"6362f4366e7b49dc","user":"user-0031"}
+{"amount_cents":42852,"level":"info","message":"order placed","order_id":"ord-394366","timestamp":"2026-03-14T12:22:39Z","trace_id":"ac911b9cb67eb4bc","user":"user-0048"}
+{"amount_cents":2632,"level":"info","message":"order placed","order_id":"ord-270607","timestamp":"2026-03-14T12:35:24Z","trace_id":"612801592f8129e3","user":"user-0024"}
+{"amount_cents":35935,"level":"info","message":"order placed","order_id":"ord-543417","timestamp":"2026-03-14T12:43:54Z","trace_id":"394fca51e23e9da0","user":"user-0039"}
+{"amount_cents":35049,"level":"info","message":"order placed","order_id":"ord-089018","timestamp":"2026-03-14T13:16:54Z","trace_id":"d500a0cc99d40a6a","user":"user-0051"}
+{"level":"warn","message":"retrying payment provider request","retry_count":3,"timestamp":"2026-03-14T13:31:58Z","trace_id":"696da073f1c2629d","user":"user-0024"}
+{"amount_cents":11859,"level":"info","message":"order placed","order_id":"ord-778566","timestamp":"2026-03-14T14:01:24Z","trace_id":"1602c533615686d9","user":"user-0015"}
+{"level":"info","message":"order shipped","order_id":"ord-453069","timestamp":"2026-03-14T19:03:13Z","trace_id":"038ff5538f64aac9","user":"user-0037"}
+{"duration_ms":1649,"level":"warn","message":"slow query detected","timestamp":"2026-03-14T19:35:29Z","trace_id":"ea12b8c5022b9268","user":"user-0056"}
+{"amount_cents":5530,"level":"info","message":"order placed","order_id":"ord-309739","timestamp":"2026-03-14T19:38:43Z","trace_id":"7149aeb6e134b09c","user":"user-0036"}

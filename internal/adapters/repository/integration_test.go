@@ -13,15 +13,16 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
-	"path/filepath"
 	"sort"
 	"testing"
 	"time"
 
 	"svitorz/tracelog/internal/core/domain"
 	"svitorz/tracelog/internal/core/ports"
+	"svitorz/tracelog/migrations"
 )
 
 const integrationDBEnv = "TRACELOG_TEST_DATABASE_URL"
@@ -35,6 +36,25 @@ type integrationFixture struct {
 }
 
 func newIntegrationFixture(t *testing.T) integrationFixture {
+	t.Helper()
+
+	db := newEmptySchema(t)
+	ctx := context.Background()
+	if _, err := Migrate(ctx, db, migrations.Files); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	f := integrationFixture{db: db}
+	mustQueryRow(t, db, `INSERT INTO environment (code, name) VALUES ('it', 'IT') RETURNING id`, &f.envID)
+	mustQueryRow(t, db, `INSERT INTO monitored_application (name, service_key) VALUES ('A', 'app-a') RETURNING id`, &f.appA)
+	mustQueryRow(t, db, `INSERT INTO monitored_application (name, service_key) VALUES ('B', 'app-b') RETURNING id`, &f.appB)
+	mustQueryRow(t, db, `INSERT INTO event_source (name, source_type) VALUES ('HTTP', 'http') RETURNING id`, &f.source)
+
+	return f
+}
+
+// newEmptySchema returns a connection whose search_path is a new schema, dropped at cleanup.
+func newEmptySchema(t *testing.T) *sql.DB {
 	t.Helper()
 
 	baseURL := os.Getenv(integrationDBEnv)
@@ -75,35 +95,28 @@ func newIntegrationFixture(t *testing.T) integrationFixture {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	applyMigrations(t, db)
-
-	f := integrationFixture{db: db}
-	mustQueryRow(t, db, `INSERT INTO environment (code, name) VALUES ('it', 'IT') RETURNING id`, &f.envID)
-	mustQueryRow(t, db, `INSERT INTO monitored_application (name, service_key) VALUES ('A', 'app-a') RETURNING id`, &f.appA)
-	mustQueryRow(t, db, `INSERT INTO monitored_application (name, service_key) VALUES ('B', 'app-b') RETURNING id`, &f.appB)
-	mustQueryRow(t, db, `INSERT INTO event_source (name, source_type) VALUES ('HTTP', 'http') RETURNING id`, &f.source)
-
-	return f
+	return db
 }
 
-func applyMigrations(t *testing.T, db *sql.DB) {
+// applyRawMigrations reproduces the old scripts/run-migrations.sh: every file, twice,
+// without schema_migrations. The double pass also checks the files are idempotent.
+func applyRawMigrations(t *testing.T, db *sql.DB) {
 	t.Helper()
 
-	files, err := filepath.Glob(filepath.Join("..", "..", "..", "migrations", "*.sql"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("find migrations: %v (found %d)", err, len(files))
+	names, err := fs.Glob(migrations.Files, "*.sql")
+	if err != nil || len(names) == 0 {
+		t.Fatalf("find migrations: %v (found %d)", err, len(names))
 	}
-	sort.Strings(files)
+	sort.Strings(names)
 
-	// Duas passadas: as migrations precisam ser idempotentes (AGENTS.md, seção 5).
 	for pass := 1; pass <= 2; pass++ {
-		for _, file := range files {
-			content, err := os.ReadFile(file)
+		for _, name := range names {
+			content, err := fs.ReadFile(migrations.Files, name)
 			if err != nil {
-				t.Fatalf("read %s: %v", file, err)
+				t.Fatalf("read %s: %v", name, err)
 			}
 			if _, err := db.Exec(string(content)); err != nil {
-				t.Fatalf("apply %s (pass %d): %v", filepath.Base(file), pass, err)
+				t.Fatalf("apply %s (pass %d): %v", name, pass, err)
 			}
 		}
 	}
@@ -274,5 +287,81 @@ func TestIntegrationErrorFrequencyByDay(t *testing.T) {
 		if d := got[i].Date.Format("2006-01-02"); d != w.date || got[i].Errors != w.errors || got[i].Fatal != w.fatal {
 			t.Errorf("day %d = %s errors=%d fatal=%d, want %s errors=%d fatal=%d", i, d, got[i].Errors, got[i].Fatal, w.date, w.errors, w.fatal)
 		}
+	}
+}
+
+func TestIntegrationMigrateAppliesEachVersionOnce(t *testing.T) {
+	db := newEmptySchema(t)
+	ctx := context.Background()
+
+	first, err := Migrate(ctx, db, migrations.Files)
+	if err != nil {
+		t.Fatalf("first Migrate() error = %v", err)
+	}
+	if len(first.Applied) != first.Total || first.Total == 0 {
+		t.Fatalf("first Migrate() applied %d of %d, want all", len(first.Applied), first.Total)
+	}
+
+	second, err := Migrate(ctx, db, migrations.Files)
+	if err != nil {
+		t.Fatalf("second Migrate() error = %v", err)
+	}
+	if len(second.Applied) != 0 {
+		t.Fatalf("second Migrate() applied %v, want nothing", second.Applied)
+	}
+
+	var recorded int
+	mustQueryRow(t, db, `SELECT COUNT(*) FROM schema_migrations`, &recorded)
+	if recorded != first.Total {
+		t.Fatalf("schema_migrations rows = %d, want %d", recorded, first.Total)
+	}
+}
+
+func TestIntegrationMigrateAdoptsDatabaseFromOldScript(t *testing.T) {
+	db := newEmptySchema(t)
+	applyRawMigrations(t, db)
+
+	result, err := Migrate(context.Background(), db, migrations.Files)
+	if err != nil {
+		t.Fatalf("Migrate() on a database migrated by the old script error = %v", err)
+	}
+	if len(result.Applied) != result.Total {
+		t.Fatalf("Migrate() applied %d of %d, want every version recorded", len(result.Applied), result.Total)
+	}
+}
+
+func TestIntegrationSaveBasicSetupIsIdempotent(t *testing.T) {
+	db := newEmptySchema(t)
+	ctx := context.Background()
+	if _, err := Migrate(ctx, db, migrations.Files); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+	repo := NewPostgresSystemSetupRepository(db)
+
+	setup := ports.BasicSystemSetup{
+		Application: domain.MonitoredApplication{Name: "Local Application", ServiceKey: "local-app"},
+		Environment: domain.Environment{Code: "local", Name: "Local"},
+		Source:      domain.EventSource{Name: "HTTP API", SourceType: "http"},
+	}
+
+	first, err := repo.SaveBasicSetup(ctx, setup)
+	if err != nil {
+		t.Fatalf("first SaveBasicSetup() error = %v", err)
+	}
+	second, err := repo.SaveBasicSetup(ctx, setup)
+	if err != nil {
+		t.Fatalf("second SaveBasicSetup() error = %v", err)
+	}
+
+	if first.Application.ID != second.Application.ID || first.Environment.ID != second.Environment.ID || first.Source.ID != second.Source.ID {
+		t.Fatalf("IDs changed between runs: %+v vs %+v", first, second)
+	}
+
+	var apps, envs, sources int
+	mustQueryRow(t, db, `SELECT COUNT(*) FROM monitored_application`, &apps)
+	mustQueryRow(t, db, `SELECT COUNT(*) FROM environment`, &envs)
+	mustQueryRow(t, db, `SELECT COUNT(*) FROM event_source`, &sources)
+	if apps != 1 || envs != 1 || sources != 1 {
+		t.Fatalf("rows = %d apps, %d envs, %d sources; want 1 each", apps, envs, sources)
 	}
 }

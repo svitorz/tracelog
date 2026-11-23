@@ -3,10 +3,13 @@ package services
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,6 +19,17 @@ import (
 )
 
 const maxImportedLogLineSize = 1024 * 1024
+
+// maxReportedImportErrors caps how many failed lines are listed in the result; the
+// total is always in PersistenceError (spec 0004, seção 4.3).
+const maxReportedImportErrors = 10
+
+// ImportLineError identifies a line that could not be stored.
+type ImportLineError struct {
+	File   string
+	Line   int
+	Reason string
+}
 
 // ImportLogFilesInput defines the CLI input for file-based ingestion.
 type ImportLogFilesInput struct {
@@ -31,9 +45,15 @@ type ImportLogFilesResult struct {
 	LinesRead        int
 	Persisted        int
 	PersistenceError int
-	Normalized       int
-	Partial          int
-	Uncategorizable  int
+	// Duplicates counts lines already imported before (same derived external_id).
+	Duplicates int
+	// Errors lists up to maxReportedImportErrors failed lines, in reading order.
+	Errors []ImportLineError
+	// BlankSkipped counts empty or whitespace-only lines, which are not stored.
+	BlankSkipped    int
+	Normalized      int
+	Partial         int
+	Uncategorizable int
 }
 
 // ImportLogFilesUseCase ingests technical events from one or more files.
@@ -106,11 +126,18 @@ func (uc *ImportLogFilesUseCase) importFile(ctx context.Context, reader io.Reade
 		lineNumber++
 		result.LinesRead++
 
-		parsed := uc.parseLine(scanner.Text())
+		rawLine := scanner.Text()
+		if strings.TrimSpace(rawLine) == "" {
+			result.BlankSkipped++
+			continue
+		}
+
+		parsed := uc.parseLine(rawLine)
 		parsed.Payload = enrichImportedPayload(parsed.Payload, path, lineNumber, parsed.Format, parsed.Parser)
 		category, status := uc.categorizer.Categorize(parsed)
 
 		registered, err := uc.registerUC.Execute(ctx, RegisterTechnicalEventInput{
+			ExternalID:          importedLineExternalID(path, lineNumber, rawLine),
 			OccurredAt:          parsed.OccurredAt,
 			Message:             parsed.Message,
 			Category:            category,
@@ -127,6 +154,14 @@ func (uc *ImportLogFilesUseCase) importFile(ctx context.Context, reader io.Reade
 		})
 		if err != nil {
 			result.PersistenceError++
+			if len(result.Errors) < maxReportedImportErrors {
+				result.Errors = append(result.Errors, ImportLineError{File: path, Line: lineNumber, Reason: err.Error()})
+			}
+			continue
+		}
+
+		if registered.Duplicate {
+			result.Duplicates++
 			continue
 		}
 
@@ -146,6 +181,14 @@ func (uc *ImportLogFilesUseCase) importFile(ctx context.Context, reader io.Reade
 	}
 
 	return nil
+}
+
+// importedLineExternalID identifies a log line so that importing the same file again is
+// deduplicated (spec 0004, seção 4.1). It uses the base name, not the path, so the same
+// file imported from the host or from a container mount gets the same IDs.
+func importedLineExternalID(path string, lineNumber int, rawLine string) string {
+	sum := sha256.Sum256([]byte(filepath.Base(path) + "\x00" + strconv.Itoa(lineNumber) + "\x00" + rawLine))
+	return "file:" + hex.EncodeToString(sum[:])[:32]
 }
 
 func normalizeImportFileList(files []string) []string {
@@ -225,9 +268,15 @@ type jsonLogLineParser struct{}
 
 func (jsonLogLineParser) Name() string { return "json" }
 
+// Detect claims lines starting with "{" (even if broken, to keep the JSON parse error) and
+// lines starting with "[" only when they are valid JSON: "[06/Mar/2026:...] WARN ..." is a
+// bracketed timestamp, not a JSON array (spec 0004).
 func (jsonLogLineParser) Detect(rawLine string) bool {
 	trimmed := strings.TrimSpace(rawLine)
-	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
+	if strings.HasPrefix(trimmed, "{") {
+		return true
+	}
+	return strings.HasPrefix(trimmed, "[") && json.Valid([]byte(trimmed))
 }
 
 func (jsonLogLineParser) Parse(rawLine string, now time.Time) parsedLogLine {
@@ -373,12 +422,15 @@ func (defaultLogLineCategorizer) Categorize(parsed parsedLogLine) (domain.EventC
 	}
 
 	content := strings.ToLower(strings.TrimSpace(parsed.Message))
+	words := messageWords(content)
 	switch {
-	case containsAny(content, "login", "logout", "auth", "access granted", "permission", "user action", "created by", "updated by"):
-		return domain.CategoryAudit, promoteNormalizationStatus(parsed.NormalizationStatus, domain.NormalizationStatusNormalized)
-	case containsAny(content, "unauthorized", "forbidden", "denied", "token", "credential", "security", "intrusion"):
+	// Security first: "login failed" and "unauthorized" also contain audit words (spec 0004).
+	case hasAnyWord(words, securityWords...) ||
+		(hasAnyWord(words, authenticationWords...) && hasAnyWord(words, authFailureWords...)):
 		return domain.CategorySecurity, promoteNormalizationStatus(parsed.NormalizationStatus, domain.NormalizationStatusNormalized)
-	case containsAny(content, "database", "disk", "memory", "cpu", "network", "timeout", "connection", "postgres", "redis", "kafka"):
+	case hasAnyWord(words, auditWords...) || containsAny(content, auditPhrases...):
+		return domain.CategoryAudit, promoteNormalizationStatus(parsed.NormalizationStatus, domain.NormalizationStatusNormalized)
+	case hasAnyWord(words, systemWords...):
 		return domain.CategorySystem, promoteNormalizationStatus(parsed.NormalizationStatus, domain.NormalizationStatusNormalized)
 	case parsed.Format != "plain_text" && content != "":
 		return domain.CategoryApplication, promoteNormalizationStatus(parsed.NormalizationStatus, domain.NormalizationStatusPartial)
@@ -387,14 +439,21 @@ func (defaultLogLineCategorizer) Categorize(parsed parsedLogLine) (domain.EventC
 	}
 }
 
+// Category keywords, matched as whole words (spec 0004, seção 4.4).
+var (
+	securityWords       = []string{"unauthorized", "forbidden", "denied", "intrusion", "security", "credential", "credentials", "token", "tokens"}
+	authenticationWords = []string{"login", "logon", "signin", "auth", "authentication"}
+	authFailureWords    = []string{"failed", "failure", "invalid", "rejected", "locked"}
+	auditWords          = []string{"login", "logout", "auth", "authentication", "permission"}
+	auditPhrases        = []string{"access granted", "user action", "created by", "updated by"}
+	systemWords         = []string{"database", "disk", "memory", "cpu", "network", "timeout", "timeouts", "connection", "connections", "postgres", "redis", "kafka"}
+)
+
+// promoteNormalizationStatus keeps the parser's verdict and only fills it when missing.
+// Recognizing a category must not hide a parse failure: a line whose timestamp could not
+// be read stays "partial" (spec 0004).
 func promoteNormalizationStatus(current domain.NormalizationStatus, desired domain.NormalizationStatus) domain.NormalizationStatus {
-	if current == domain.NormalizationStatusNormalized {
-		return current
-	}
 	if current == "" {
-		return desired
-	}
-	if desired == domain.NormalizationStatusNormalized {
 		return desired
 	}
 	return current

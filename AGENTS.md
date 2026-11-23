@@ -13,14 +13,17 @@ Roadmap em ordem: (1) fundação OSS, (2) núcleo de investigação (pipe, busca
 
 ## 2. Stack e comandos
 
-- Go **1.24.4** (`go.mod`), módulo `svitorz/tracelog`.
+- Go **1.26.11** (`go.mod`), módulo `svitorz/tracelog`.
 - Dependências diretas: `github.com/jackc/pgx/v5` (driver via `database/sql`), `github.com/spf13/cobra`.
 - PostgreSQL 16 via `docker-compose.yml`.
 
 ```bash
 cp .env.example .env                    # primeira vez
-docker compose up -d postgres           # banco
-./scripts/run-migrations.sh             # aplica migrations/*.sql
+docker compose up -d                    # banco + migrate + init --defaults + API
+
+# ou, com a CLI no host:
+docker compose up -d postgres           # só o banco
+go run . migrate                        # aplica migrations pendentes
 go run . init                           # setup obrigatório antes do serve
 go run . serve                          # servidor HTTP
 
@@ -61,10 +64,10 @@ A camada de repositório hoje é específica de PostgreSQL (`JSONB`, `gen_random
 
 ## 5. Migrations
 
-- Arquivos em `migrations/`, nomeados `NNNNNN_descricao.sql`, executados **em ordem a cada execução** de `scripts/run-migrations.sh`. Não há tabela de controle de versão.
-- Por isso **toda migration deve ser idempotente**: `CREATE ... IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `DROP ... IF EXISTS`.
+- Arquivos em `migrations/`, nomeados `NNNNNN_descricao.sql`, embutidos no binário e aplicados em ordem por `tracelog migrate`, que registra cada versão em `schema_migrations` (spec 0003).
+- **Toda migration continua tendo que ser idempotente** (`CREATE ... IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `DROP ... IF EXISTS`): se o processo morrer entre aplicar e registrar, o arquivo roda de novo, e bancos migrados pelo antigo script são adotados reaplicando tudo.
+- Cada arquivo controla a própria transação (`BEGIN`/`COMMIT`).
 - Nunca edite uma migration já commitada. Crie uma nova.
-- Se a tarefa exigir controle de versão de migrations, isso é uma mudança de arquitetura: escreva uma spec antes.
 
 ## 6. Configuração
 
@@ -83,7 +86,8 @@ A camada de repositório hoje é específica de PostgreSQL (`JSONB`, `gen_random
 ## 8. Documentação
 
 - `docs/guia-do-projeto.md` é o guia de referência do estado atual. **Atualize-o** quando um comportamento, comando ou variável mudar.
-- Os demais arquivos em `docs/` (`cli.md`, `http-api.md`, `domain.md`, `architecture.md`, `development.md`, `getting-started.md`) têm divergências conhecidas listadas na seção 12 do guia. Não copie afirmações deles sem verificar no código.
+- O `README.md` (em inglês) é a porta de entrada: quickstart, diagrama e o que o projeto não faz. Detalhes ficam no guia; não duplique conteúdo entre os dois.
+- Blocos de saída de comando na documentação devem ser saída real capturada (`docs/demo-output.txt` é gerado por `scripts/demo.sh`), nunca escritos à mão.
 - Não documente funcionalidade que não existe. Se algo for planejado, diga que é planejado.
 
 ## 9. Testes
@@ -104,14 +108,12 @@ A camada de repositório hoje é específica de PostgreSQL (`JSONB`, `gen_random
 
 ## 11. Pendências conhecidas
 
-Lista completa e atualizada em `docs/guia-do-projeto.md`, seções 11 e 13. Resumo dos mais importantes:
+Lista completa e atualizada em `docs/guia-do-projeto.md`, seções 12 e 13. Resumo dos mais importantes:
 
-- `external_id` duplicado retorna `500` (ver spec de ingestão em lote).
-- Sem limite de tamanho de corpo no HTTP.
-- Sem graceful shutdown.
-- Importação de arquivos faz um `INSERT` por linha, sem lote.
-- `metrics errors` ignora `fatal`.
-- `seed` é no-op.
+- Sem autenticação, TLS nem rate limit (fora do MVP; ver spec 0003, seção 5).
+- Heurística de severidade não entende negação ("0 errors found" é `error`).
+- Importação de arquivos faz um `INSERT` por linha, sem lote, com `synchronous_commit=off` (~2.300 linhas/s medidas; ver guia, seção 6.3).
+- `POST /events/batch` e `external_id` obrigatório (spec 0001, D3/D5) adiados para depois da v0.1.0.
 
 ## 12. O que pedir confirmação antes de fazer
 

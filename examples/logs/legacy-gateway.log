@@ -1,0 +1,49 @@
+GC pause 120ms
+upstream connection reset by peer
+GC pause 120ms
+
+config reloaded from /etc/gateway.conf
+upstream connection reset by peer
+upstream connection reset by peer
+config reloaded from /etc/gateway.conf
+config reloaded from /etc/gateway.conf
+gateway started on port 9000
+gateway started on port 9000
+config reloaded from /etc/gateway.conf
+GC pause 120ms
+
+~~~ 4f 3a 00 1b ~~~
+upstream connection reset by peer
+upstream connection reset by peer
+config reloaded from /etc/gateway.conf
+health probe ok
+gateway started on port 9000
+GC pause 120ms
+upstream connection reset by peer
+config reloaded from /etc/gateway.conf
+upstream connection reset by peer
+
+gateway started on port 9000
+health probe ok
+upstream connection reset by peer
+GC pause 120ms
+health probe ok
+config reloaded from /etc/gateway.conf
+health probe ok
+GC pause 120ms
+upstream connection reset by peer
+
+upstream connection reset by peer
+gateway started on port 9000
+config reloaded from /etc/gateway.conf
+~~~ 4f 3a 00 1b ~~~
+config reloaded from /etc/gateway.conf
+GC pause 120ms
+upstream connection reset by peer
+upstream connection reset by peer
+gateway started on port 9000
+health probe ok
+
+config reloaded from /etc/gateway.conf
+upstream connection reset by peer
+GC pause 120ms

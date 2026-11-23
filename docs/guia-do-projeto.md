@@ -1,546 +1,452 @@
 # Guia do Projeto TraceLog
 
-Documento de referência para retomar o desenvolvimento do TraceLog. Descreve o estado atual do código, como instalar, compilar, executar e testar, e o que ainda precisa de atenção.
+Referência única do estado atual do TraceLog: como instalar, executar, testar e estender, quais regras o código aplica e o que ele não faz. As decisões e o "porquê" de cada mudança estão nas specs de [`docs/specs/`](./specs/); as regras para quem contribui estão no [`AGENTS.md`](../AGENTS.md).
 
-> Este guia foi escrito a partir do código no commit `456c830` e atualizado com as mudanças da spec 0002 (fase 2, 2026-11-20). Quando algo aqui divergir do código, o código prevalece. As divergências conhecidas com os outros documentos de `docs/` estão listadas na seção [Divergências conhecidas](#divergências-conhecidas-na-documentação).
+> Conferido contra o código e a execução real na fase 6 (2026-11-20). Blocos de saída marcados como "saída real" foram capturados de execuções, não escritos à mão. Se algo aqui divergir do código, o código prevalece: corrija este guia.
 
 ---
 
 ## 1. Visão geral
 
-TraceLog é um MVP local de monitoramento de eventos técnicos, escrito em Go com PostgreSQL. Ele:
+TraceLog é um MVP de observabilidade escrito em Go com PostgreSQL. Ele:
 
-- recebe eventos de aplicações via HTTP (`POST /events`);
-- importa eventos a partir de arquivos de log (`tracelog import logs`);
-- persiste tudo em PostgreSQL;
-- oferece uma CLI para consultar eventos, métricas de erro e entidades de referência.
+- recebe eventos técnicos de aplicações via HTTP (`POST /events`);
+- importa eventos de arquivos de log em três formatos (`tracelog import logs`);
+- normaliza o que chega, deriva a severidade no servidor e grava tudo em PostgreSQL;
+- oferece uma CLI para listar eventos, contar erros por dia e inspecionar o setup.
 
-Fora do escopo atual: dashboards, consumidores em background, alertas, provisionamento automático de ambientes e RabbitMQ (previsto em `docs/architecture.md`, ainda não implementado).
-
----
-
-## 2. O que já foi feito
-
-Histórico resumido. Os commits completos estão em `git log`.
-
-| Área | Entrega | Commits de referência |
-|------|---------|----------------------|
-| HTTP | Servidor com `POST /events` e `GET /health`, respostas JSON | `d4cc38e`, `2d01da8` |
-| HTTP (spec 0002) | Timeouts, graceful shutdown, limite de corpo (413), `415`, erros sem vazamento, deduplicação por aplicação, `/ready` | branch `fix/http-hardening` |
-| Configuração | Carga de `.env` na raiz e variáveis de ambiente, com validação | `ddf3c6b`, `6aa3009`, `2eece1b` |
-| CLI | Estrutura com Cobra; comandos `serve`, `events list`, `metrics errors`, `db list` | `812cccc`, `e9f51b8`, `c8047b1` |
-| Domínio | Entidades `TechnicalEvent`, `MonitoredApplication`, `EventSource`, `Environment`; enums de severidade, categoria e canal | `eaa0014`, `ce03421` |
-| Casos de uso | Registro de evento, listagem com filtros, frequência de erros | `1e92d7f`, `d0d78be`, `c4bba8b` |
-| Setup inicial | `tracelog init` (interativo) e verificação obrigatória no `serve` | `812cccc`, `269d429`, `979ee17`, `3f151f9` |
-| Banco | Migrations SQL (schema inicial e campos de importação) | `9d171f1`, `7c12bf6` |
-| Severidade | Derivada no servidor a partir de nível, mensagem e payload (não confiada ao cliente) | `4467ad9`, `767c699` |
-| Normalização | Ingestão tolerante: campos ausentes/inválidos são normalizados e anotados em `payload._ingestion` | `3e347cf` |
-| Fallback de IDs | Se `application_id`, `source_id` ou `environment_id` faltarem/forem inválidos, usa-se o setup de `init`; há nova tentativa após erro de FK | `3e347cf` |
-| Importação de logs | `tracelog import logs --file ...` com parsers para JSON, `timestamp level message` e texto puro | `3e347cf`, `a700da1` |
-| Testes | Testes unitários de casos de uso, config e mapeamento de erro de FK | `699cfd0` e posteriores |
-| Documentação | `README.md` e `docs/` (getting-started, cli, http-api, domain, architecture, development) | `55d2662`, `a3f9261`, `147ea40`, `72aa48e` |
+**O que ele não faz:** não tem dashboard nem interface web, autenticação, TLS, rate limit, alertas, busca textual, agrupamento por fingerprint nem visão por `trace_id`. Não há lote no HTTP (`POST /events/batch`). Esses itens estão no roadmap do `AGENTS.md` ou nas specs como trabalho futuro.
 
 ### Decisões de comportamento que importam
 
-- **`severity` não é aceito do cliente no HTTP.** Ela é derivada pelo servidor (ver seção 7.3).
-- **Ingestão tolerante.** O HTTP só responde erro quando não consegue persistir nada. Dados incompletos são gravados com anotações.
-- **`serve` exige setup.** Se `tracelog init` não foi executado, o servidor não sobe.
-- **`seed` é um no-op.** Ele apenas imprime uma mensagem. Os dados de referência vêm do `init`.
+- **A ingestão nunca descarta um evento que possa ser gravado.** Campos ausentes ou inválidos são normalizados e anotados em `payload._ingestion`; JSON malformado também vira evento. O HTTP só recusa quando não há como gravar: corpo grande demais (`413`), `Content-Type` que não é JSON (`415`) ou falha interna (`500`).
+- **A severidade é derivada pelo servidor**, por heurística sobre a mensagem e o payload (seção 7.3). O cliente HTTP não a define.
+- **Reenviar um evento é seguro:** mesmo `external_id` na mesma aplicação responde `200` com o evento já gravado. Reimportar um arquivo também não duplica.
+- **`serve` e `import logs` exigem o setup** criado por `tracelog init`.
 
 ---
 
-## 3. Pré-requisitos
+## 2. Pré-requisitos
 
 | Ferramenta | Versão | Observação |
 |------------|--------|------------|
-| Go | **1.26.11** (conforme `go.mod`) | Os docs antigos citam 1.21 e 1.25; a referência válida é o `go.mod`. Com `GOTOOLCHAIN=auto` (padrão), um Go mais antigo baixa essa versão sozinho. |
-| Docker + Docker Compose | Plugin `docker compose` | Usado para subir o PostgreSQL 16. |
-| `psql` | Opcional | Só para inspeção manual; os scripts usam `psql` dentro do container. |
-| Git | Qualquer versão recente | |
+| Docker + Docker Compose | plugin `docker compose` | Suficiente para subir tudo e rodar a demo. |
+| Go | **1.26.11** (`go.mod`) | Só para rodar a CLI no host, testar ou compilar. Com `GOTOOLCHAIN=auto` (padrão), um Go mais antigo baixa essa versão sozinho. |
+| `make`, `curl` | qualquer | Atalhos do `Makefile` e da demo. |
 
 ---
 
-## 4. Instalação e configuração
+## 3. Instalação e configuração
 
-Execute tudo a partir da **raiz do repositório**. Isso é obrigatório: o `.env` é lido do diretório atual (`config.go` usa o caminho relativo `.env`).
+Rode os comandos a partir da **raiz do repositório**: o `.env` é lido do diretório atual.
 
-### 4.1 Clonar
-
-```bash
-git clone <url-do-repositorio> tracelog
-cd tracelog
-```
-
-### 4.2 Criar o `.env`
+### 3.1 `.env`
 
 ```bash
 cp .env.example .env
-```
-
-Conteúdo padrão (`.env.example`):
-
-```env
-APP_NAME=tracelog
-APP_ENV=local
-HTTP_PORT=8080
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=tracelog
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_SSLMODE=disable
 ```
 
 | Variável | Obrigatória | Padrão | Descrição |
 |----------|-------------|--------|-----------|
 | `APP_NAME` | não | `tracelog` | Nome exibido no log do `serve`. |
 | `APP_ENV` | não | `local` | Ambiente exibido no log do `serve`. |
-| `HTTP_PORT` | não | `8080` | Porta do servidor HTTP (1–65535). |
-| `HTTP_MAX_BODY_BYTES` | não | `1048576` | Tamanho máximo do corpo de `POST /events`, em bytes. Acima disso: `413`. Precisa ser positivo. |
-| `DB_HOST` | não | `localhost` | Host do PostgreSQL. |
-| `DB_PORT` | não | `5432` | Porta do PostgreSQL; também é a porta publicada pelo Docker. |
+| `HTTP_PORT` | não | `8080` | Porta da API; o compose a publica em `127.0.0.1`. |
+| `HTTP_MAX_BODY_BYTES` | não | `1048576` | Tamanho máximo do corpo de `POST /events`. Acima disso: `413`. Precisa ser positivo. |
+| `DB_HOST` | não | `localhost` | Host do PostgreSQL para a CLI no host (o container usa `postgres`). |
+| `DB_PORT` | não | `5432` | Porta do PostgreSQL para a CLI no host; o compose a publica em `127.0.0.1`. |
 | `DB_NAME` | **sim** | — | Nome do banco. |
 | `DB_USER` | **sim** | — | Usuário do banco. |
-| `DB_PASSWORD` | **sim** | — | Senha do banco. |
-| `DB_SSLMODE` | não | `disable` | Um de `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full`. |
+| `DB_PASSWORD` | **sim** | — | Senha. Pode ter espaços e aspas (o DSN escapa os valores). |
+| `DB_SSLMODE` | não | `disable` | `disable`, `allow`, `prefer`, `require`, `verify-ca` ou `verify-full`. |
 
-**Precedência:** variável de ambiente do shell > `.env`. Um `.env` nunca sobrescreve uma variável já definida.
+- **Precedência:** variável de ambiente do shell > `.env`.
+- Sem `DB_NAME`, `DB_USER` e `DB_PASSWORD`, **qualquer** comando falha antes de executar, inclusive `--help`.
+- O parser do `.env` é simples: não use comentário no fim da linha (`KEY=valor # x` faz o `# x` entrar no valor).
 
-> **Atenção:** sem `DB_NAME`, `DB_USER` e `DB_PASSWORD`, **qualquer** comando do binário falha antes de executar, inclusive `--help`.
-
-### 4.3 Subir o PostgreSQL
-
-```bash
-docker compose up -d postgres
-docker compose ps
-```
-
-O serviço (`docker-compose.yml`) usa `postgres:16-alpine`, container `tracelog-postgres`, volume `tracelog_postgres_data` e healthcheck com `pg_isready`.
-
-Para zerar o banco (apaga os dados):
+### 3.2 Subir com Docker Compose
 
 ```bash
-docker compose down -v
+docker compose up -d --wait     # ou: make up
+docker compose ps -a
 ```
 
-### 4.4 Aplicar as migrations
+| Serviço | Faz | Começa quando |
+|---------|-----|---------------|
+| `postgres` | `postgres:16.16-alpine`, volume `tracelog_postgres_data`, healthcheck `pg_isready` | — |
+| `migrate` | `tracelog migrate` e termina | `postgres` saudável |
+| `init` | `tracelog init --defaults` e termina | `migrate` terminou com código 0 |
+| `api` | `tracelog serve`, healthcheck em `/ready` | `init` terminou com código 0 |
+
+`migrate` e `init` aparecem como `Exited (0)`: é o esperado. Rodar `up` de novo não reaplica migrations nem muda IDs. A imagem `tracelog:local` vem do `Dockerfile` (multi-stage, `alpine:3.24`, processo com UID 10001).
+
+- Dentro do compose a aplicação usa `DB_HOST=postgres` e `DB_PORT=5432`; o `DB_HOST`/`DB_PORT` do `.env` valem só para a CLI no host.
+- Banco e API são publicados **só em `127.0.0.1`**. Se a porta já estiver em uso, troque `DB_PORT` ou `HTTP_PORT` no `.env`.
+- Só o banco, para usar a CLI no host: `docker compose up -d postgres`.
+- Apagar os dados: `docker compose down -v`.
+
+**O que não é seguro neste setup:** a API não tem autenticação (quem alcança a porta grava eventos), não há TLS (nem cliente→API nem API→banco), a senha padrão do banco é `postgres` e não há rate limit. Publicar só em `127.0.0.1` reduz a exposição, mas não resolve nada disso. É um setup de uso local.
+
+### 3.3 Migrations
 
 ```bash
-./scripts/run-migrations.sh
+go run . migrate        # ou: make migrate
 ```
 
-O script:
+`tracelog migrate` (spec 0003) cria a tabela `schema_migrations`, aplica em ordem os `migrations/*.sql` **embutidos no binário** que ainda não foram registrados e registra cada um logo depois. Um *advisory lock* impede duas execuções simultâneas de aplicar a mesma migration. Bancos migrados antes da existência do comando são adotados: tudo roda de novo, sem erro porque as migrations são idempotentes.
 
-1. cria o `.env` a partir do `.env.example` se ele não existir;
-2. carrega o `.env`;
-3. sobe o serviço `postgres`, se necessário;
-4. executa **todos** os `migrations/*.sql` em ordem alfabética, com `psql -v ON_ERROR_STOP=1`.
+Saída real numa base vazia e, em seguida, numa segunda execução:
 
-Migrations atuais:
+```text
+[migrate] applied 000001_initial_schema
+[migrate] applied 000002_add_log_import_fields
+[migrate] applied 000003_external_id_per_application
+[migrate] database is up to date (3 migrations)
+[migrate] database is up to date (3 migrations)
+```
 
 | Arquivo | Conteúdo |
 |---------|----------|
-| `000001_initial_schema.sql` | Tabelas `environment`, `monitored_application`, `event_source`, `technical_event`, FKs e índices. |
-| `000002_add_log_import_fields.sql` | Colunas `raw_line`, `normalization_status`, `parse_error` em `technical_event` e índice. |
-| `000003_external_id_per_application.sql` | Troca o `UNIQUE (external_id)` global por índice único parcial em `(application_id, external_id)` onde `external_id` não é nulo. |
+| `000001_initial_schema.sql` | Tabelas, FKs e índices (seção 8). Também cria a extensão `pgcrypto`, que nenhum código usa; foi mantida de propósito (spec 0003, seção 9). |
+| `000002_add_log_import_fields.sql` | Colunas `raw_line`, `normalization_status`, `parse_error` e índice. |
+| `000003_external_id_per_application.sql` | Troca o `UNIQUE (external_id)` global pelo índice único parcial `(application_id, external_id)`. |
 
-> **Importante:** não há controle de versão. Cada execução reaplica todos os arquivos. Por isso cada migration usa `IF NOT EXISTS`. Qualquer migration nova precisa seguir o mesmo padrão idempotente, ou o script precisa ser evoluído para registrar o que já foi aplicado.
-
-### 4.5 Setup inicial (obrigatório antes do `serve`)
+### 3.4 Setup inicial
 
 ```bash
-go run . init
+go run . init             # interativo; Enter aceita o padrão
+go run . init --defaults  # sem perguntas (é o que o compose roda)
 ```
 
-É interativo. Pressione Enter para aceitar os padrões:
-
-| Pergunta | Padrão |
-|----------|--------|
-| Application name | `Local Application` |
-| Application service key | `local-app` |
-| Environment code | `local` |
-| Environment name | `Local` |
-| Event source name | `HTTP API` |
-| Event source type | `http` |
-
-Ao final, a saída mostra os IDs gravados (application, environment, source). **Guarde esses IDs**: são usados nas chamadas HTTP e nos filtros da CLI. Para listá-los depois:
-
-```bash
-go run . db list applications
-go run . db list environments
-go run . db list sources
-```
-
-O `init` é um upsert: rodar de novo atualiza os registros existentes (chaves: `environment.code`, `monitored_application.service_key`, `event_source(name, source_type)`).
+Grava uma aplicação (`Local Application`, chave `local-app`), um ambiente (`local`) e uma fonte (`HTTP API`, tipo `http`) e imprime os IDs. É um upsert por `monitored_application.service_key`, `environment.code` e `event_source(name, source_type)`: rodar de novo mantém os IDs. Para listá-los depois: `go run . db list applications|environments|sources`.
 
 ---
 
-## 5. Compilar e executar
-
-### 5.1 Build do binário
+## 4. Compilar, executar e checar
 
 ```bash
-go build -o bin/tracelog .
-./bin/tracelog --help
+go build -o bin/tracelog .   # ou: make build
+make lint                    # gofmt (falha se listar algo) + go vet
+make test                    # go test -race -count=1 ./...
+make demo                    # demonstração de ponta a ponta (seção 5.4)
 ```
 
-`bin/` está no `.gitignore`. Lembre que o `--help` só funciona com o `.env` presente no diretório atual (seção 4.2).
-
-### 5.2 Rodar sem gerar binário
+### 4.1 `serve`
 
 ```bash
-go run . <comando> [flags]
+go run . serve                    # porta do HTTP_PORT
+go run . serve --http-port 8081   # sobrescreve a porta
 ```
 
-Exemplos: `go run . serve`, `go run . events list --limit 10`.
-
-### 5.3 Checagens de qualidade
-
-```bash
-gofmt -l .          # lista arquivos fora do padrão (vazio = ok)
-go vet ./...
-go test ./...
-```
-
-Não há `Makefile` no projeto. Os comandos acima são o equivalente.
-
-### 5.4 Subir o servidor
-
-```bash
-go run . serve                  # usa HTTP_PORT do .env
-go run . serve --http-port 8081 # sobrescreve a porta
-```
-
-Saída esperada:
+Saída real (capturada num teste com banco em `127.0.0.1:55433` e `HTTP_PORT=18081`):
 
 ```text
 [serve] tracelog (local)
 [serve] Initializing PostgreSQL connection...
-[serve] PostgreSQL connected at localhost:5432/tracelog
+[serve] PostgreSQL connected at 127.0.0.1:55433/tracelog
 [serve] Initializing application dependencies...
-[serve] HTTP server listening on port 8080
+[serve] HTTP server listening on port 18081
 [serve] Ready to receive events at POST /events
 ```
 
-Se o setup estiver ausente, o `serve` falha com: `basic system setup is missing; run \`tracelog init\` before \`tracelog serve\``.
+Sem o setup, falha com ``basic system setup is missing; run `tracelog init` before `tracelog serve` ``. `Ctrl+C` ou `SIGTERM` param de aceitar conexões, esperam as requisições em andamento por até 8s, fecham o pool e imprimem `[serve] Shutdown complete`.
 
-Para encerrar: `Ctrl+C` (SIGINT) ou `SIGTERM`. O servidor para de aceitar conexões, espera as requisições em andamento por até 8s, fecha o pool do banco e imprime `[serve] Shutdown complete`.
-
-Timeouts do servidor (justificados na spec 0002): leitura de cabeçalho 5s, leitura 15s, escrita 15s, ociosidade 60s, 10s por requisição de `POST /events`. Pool do banco: até 10 conexões.
+Timeouts (spec 0002): cabeçalho 5s, leitura 15s, escrita 15s, ociosidade 60s, 10s por `POST /events`, 2s no `/ready`. Pool: até 10 conexões.
 
 ---
 
-## 6. Uso
+## 5. Uso
 
-### 6.1 API HTTP
+### 5.1 API HTTP
 
-Base: `http://localhost:8080` (ou a porta configurada).
-
-| Método | Rota | Função |
-|--------|------|--------|
+| Método | Rota | Resposta |
+|--------|------|----------|
 | `GET`, `HEAD` | `/health` | Liveness: `200 {"status":"ok"}`. Não consulta o banco. |
-| `GET`, `HEAD` | `/ready` | Readiness: ping no banco com timeout de 2s. `200 {"status":"ready"}` ou `503 {"status":"unavailable"}`. |
-| `POST` | `/events` | Registra um evento. `201` se novo, `200` se já existia (ver deduplicação). |
+| `GET`, `HEAD` | `/ready` | Readiness: `200 {"status":"ready"}` ou `503 {"status":"unavailable"}`. |
+| `POST` | `/events` | `201` se o evento é novo; `200` se já existia. |
 
-Corpo do `POST /events`:
+Corpo de `POST /events` (todos os campos são opcionais):
 
-| Campo | Tipo | Obrigatório | Comportamento real |
-|-------|------|-------------|--------------------|
-| `message` | string | não | Se vazio, grava `event received without message`. |
-| `occurred_at` | string | não | RFC3339 (com ou sem fração/offset) ou `YYYY-MM-DD HH:MM:SS`. Ausente/inválido → usa o horário de recebimento. |
-| `category` | string | não | `application`, `system`, `security`, `audit`, `unknown`. Ausente/inválido → `unknown`. |
-| `payload` | objeto | não | JSON livre. |
-| `external_id` | string | não | Vazio vira `NULL` (sem deduplicação). Acima de 255 caracteres é truncado. |
-| `trace_id` | string | não | Acima de 128 caracteres é truncado. |
-| `correlation_id` | string | não | Acima de 128 caracteres é truncado. |
-| `application_id` | UUID | não* | Qualquer versão de UUID. Ausente/inválido → setup do `init`. |
-| `source_id` | UUID | não* | Ausente/inválido → setup do `init`. |
-| `environment_id` | UUID | não* | Ausente/inválido → setup do `init`. |
+| Campo | Tipo | Comportamento |
+|-------|------|---------------|
+| `message` | string | Vazio → `event received without message`. |
+| `occurred_at` | string | RFC3339 (com ou sem fração/offset), `YYYY-MM-DDTHH:MM:SS` ou `YYYY-MM-DD HH:MM:SS` (sem fuso = UTC). Ausente ou inválido → hora de recebimento. Não é validado contra o futuro. |
+| `category` | string | `application`, `system`, `security`, `audit` ou `unknown`. Ausente ou inválida → `unknown`. |
+| `payload` | objeto | JSON livre, guardado como está (mais `_ingestion` quando há anotações). |
+| `external_id` | string | Chave de deduplicação por aplicação. Vazio → sem deduplicação. Acima de 255 caracteres é truncado. |
+| `trace_id`, `correlation_id` | string | Guardados e indexados. Acima de 128 caracteres são truncados. Não há filtro por eles na CLI. |
+| `application_id`, `source_id`, `environment_id` | UUID | Qualquer versão. Ausente, inválido ou inexistente → o do setup do `init`, com anotação. |
 
-\* Na prática são opcionais, desde que o `init` tenha sido executado (há fallback). Use sempre os IDs retornados pelo `init` para não depender do fallback.
+- `severity` enviado pelo cliente é ignorado; `payload.level` é guardado, mas não define a severidade no HTTP.
+- `Content-Type` pode ser omitido. Se enviado, precisa ser `application/json` (ou `*/*+json`). Atenção: `curl -d` sem `-H 'Content-Type: application/json'` manda `application/x-www-form-urlencoded` e recebe `415`.
 
-**Campos que não existem mais no contrato:** `severity` é **ignorado** se enviado, e `payload.level` é guardado mas não define a severidade. O servidor deriva a severidade (seção 7.3).
-
-`Content-Type` pode ser omitido; se enviado, precisa ser `application/json` (ou `*/*+json`), senão a resposta é `415`.
-
-**Deduplicação:** dois eventos com o mesmo `external_id` na mesma aplicação (`application_id` já normalizado) são o mesmo evento. O reenvio responde `200` com os dados do evento já gravado e `"duplicate": true`. Aplicações diferentes podem repetir o mesmo `external_id`.
-
-Exemplo:
-
-```bash
-curl -X POST http://localhost:8080/events \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Database connection timeout",
-    "occurred_at": "2026-03-09T14:30:00Z",
-    "category": "system",
-    "application_id": "<application-id-do-init>",
-    "source_id": "<source-id-do-init>",
-    "environment_id": "<environment-id-do-init>",
-    "payload": {"retry_count": 3, "timeout_ms": 5000}
-  }'
-```
-
-Respostas reais capturadas no teste de fumaça da fase 2 (evento novo e reenvio com o mesmo `external_id`):
+Saída real da demo (seção 5.4): evento novo, reenvio do mesmo `external_id` e `Content-Type` errado:
 
 ```text
-{"id":"432580d7-1242-4270-99d8-7198fef69d24","external_id":"smoke-1","received_at":"2026-11-20T16:03:43.446455-03:00","created_at":"2026-11-20T16:03:43.449417-03:00","duplicate":false}
-  [HTTP 201]
-{"id":"432580d7-1242-4270-99d8-7198fef69d24","external_id":"smoke-1","received_at":"2026-11-20T16:03:43.446455-03:00","created_at":"2026-11-20T16:03:43.449417-03:00","duplicate":true}
-  [HTTP 200]
+$ curl -X POST http://127.0.0.1:18083/events   # evento novo
+{"id":"7a6206f0-bff1-4099-b85c-8746b5a0dee9","external_id":"demo-0001","received_at":"2026-11-20T20:58:24.671741Z","created_at":"2026-11-20T20:58:24.674644Z","duplicate":false}
+
+[HTTP 201]
+
+$ curl -X POST http://127.0.0.1:18083/events   # reenvio do mesmo external_id
+{"id":"7a6206f0-bff1-4099-b85c-8746b5a0dee9","external_id":"demo-0001","received_at":"2026-11-20T20:58:24.671741Z","created_at":"2026-11-20T20:58:24.674644Z","duplicate":true}
+
+[HTTP 200]
+
+$ curl -X POST http://127.0.0.1:18083/events   # Content-Type que não é JSON
+{"error":"Content-Type must be application/json"}
+
+[HTTP 415]
 ```
 
-Erros:
-
-| Status | Quando |
-|--------|--------|
+| Erro | Quando |
+|------|--------|
 | `405` | Método não permitido; o cabeçalho `Allow` lista os aceitos. |
 | `413` | Corpo maior que `HTTP_MAX_BODY_BYTES`. Nada é gravado. |
 | `415` | `Content-Type` presente e diferente de JSON. Nada é gravado. |
-| `500` | Falha interna (ex.: banco fora do ar). A resposta é só `{"error":"internal error"}`; o detalhe vai para o log do servidor. |
+| `500` | Falha interna (ex.: banco fora). Corpo `{"error":"internal error"}`; o detalhe vai para o log do servidor. |
 
-JSON malformado **não** gera erro: o evento é gravado com `payload._ingestion.decode_error` e `payload._ingestion.raw_request_body`. O corpo bruto só é guardado nesse caso.
+JSON malformado **não** é erro: o evento é gravado com `payload._ingestion.decode_error` e `payload._ingestion.raw_request_body` (o corpo bruto só é guardado nesse caso).
 
-### 6.2 CLI
+### 5.2 CLI
 
-Com o binário compilado, substitua `go run .` por `tracelog`.
+Com o binário, troque `go run .` por `tracelog`. No compose: `docker compose run --rm api <comando>`.
 
-| Comando | Função | Flags principais |
-|---------|--------|------------------|
-| `serve` | Sobe o HTTP | `--http-port` |
-| `init` | Setup inicial interativo | — |
-| `events list` | Lista eventos (mais recentes primeiro) | `--severity`, `--application-id`, `--environment-id`, `--from`, `--to`, `--limit` (padrão 50) |
-| `metrics errors` | Contagem de `error` e `fatal` por dia (UTC) | `--application-id`, `--environment-id`, `--from`, `--to` |
-| `db list environments\|applications\|sources` | Lista entidades de referência com IDs | — |
+| Comando | Função | Flags |
+|---------|--------|-------|
+| `serve` | Sobe a API | `--http-port` |
+| `migrate` | Aplica migrations pendentes | — |
+| `init` | Grava o setup mínimo | `--defaults` |
 | `import logs` | Importa arquivos de log | `--file` (obrigatório, repetível) |
-| `seed` | **No-op** (apenas imprime mensagem) | — |
+| `events list` | Lista eventos, mais recentes (`occurred_at`) primeiro | `--severity`, `--application-id`, `--environment-id`, `--from`, `--to`, `--limit` (padrão 50) |
+| `metrics errors` | `error` e `fatal` por dia (UTC) | `--application-id`, `--environment-id`, `--from`, `--to` |
+| `db list environments\|applications\|sources` | Entidades do setup, com IDs | — |
 
-Formatos de data em `--from`/`--to`: RFC3339 (`2026-03-09T14:30:00Z`, usado como está) ou `2026-03-09`. Só a data em `--from` vale 00:00 UTC; em `--to` vale o dia inteiro (até 23:59:59.999999999 UTC).
+`--from`/`--to` aceitam RFC3339 (usado como está) ou `YYYY-MM-DD`: em `--from` vale 00:00 UTC; em `--to`, o dia inteiro. Um UUID malformado em `--application-id`/`--environment-id` faz o PostgreSQL recusar a consulta e o comando falha com a mensagem dele.
 
-Exemplos:
+Saída real da demo:
 
-```bash
-go run . events list --severity error --limit 20
-go run . events list --application-id <uuid> --from 2026-03-01 --to 2026-03-09
-go run . metrics errors --environment-id <uuid> --from 2026-03-01
-go run . db list applications
+```text
+$ tracelog events list --severity fatal --from 2026-03-01 --to 2026-03-14
+OCCURRED_AT           SEVERITY  APPLICATION_ID                        ENVIRONMENT_ID                        MESSAGE
+-----------           --------  --------------                        --------------                        -------
+2026-03-10T14:47:00Z  fatal     192524eb-8a13-4ac4-afe1-42850aa716a5  6b6eae04-cf16-4999-9ec5-b805528e905b  order worker crashed: connection pool exhausted
+
+Total: 1 event(s).
 ```
 
-### 6.3 Importação de arquivos de log
+`metrics errors` está na seção 7.4.
+
+### 5.3 Importação de arquivos de log
 
 ```bash
-go run . import logs --file ./app.log
 go run . import logs --file ./app.log --file ./worker.log
 ```
 
-Cada linha é tratada por um parser, na ordem:
+Cada linha não vazia vai para o primeiro parser que a reconhecer:
 
-1. **JSON** (linha começa com `{` ou `[`). Extrai `message`/`msg`/`error`, `trace_id`, `correlation_id`/`request_id`, `level`, `timestamp`/`ts`, etc. JSON inválido → `partial` com `parse_error`.
-2. **`timestamp level message`** (ex.: `2026-03-09T14:30:00Z ERROR falha de conexão`). Timestamp inválido → `partial`.
-3. **Texto puro** (fallback). Linha vazia → `uncategorizable`.
+1. **JSON**: começa com `{`, ou com `[` e é JSON válido. Extrai `message`/`msg`/`error`/`event`/`description`, `timestamp`/`occurred_at`/`time`/`@timestamp`/`ts`, `level`/`severity`/`log_level`, `trace_id`, `correlation_id`/`request_id`, `category`. JSON quebrado → `partial` com `parse_error`.
+2. **`timestamp nível mensagem`**: `2026-03-09T14:30:00Z ERROR ...` ou `[06/Mar/2026:02:26:01 +0000] WARN ...`. Timestamp ilegível → `partial` com `parse_error`.
+3. **Texto livre**: o resto, `partial`.
 
-A categoria é inferida por palavras-chave na mensagem (ex.: `login`/`auth` → `audit`; `denied`/`token` → `security`; `database`/`timeout`/`connection` → `system`). Se nada casar, vira `unknown`.
+Sem timestamp utilizável, `occurred_at` vira a hora da importação. Linhas em branco são puladas e contadas.
 
-Saída:
+**Categoria** (palavras inteiras, na ordem): sinais de segurança (`unauthorized`, `forbidden`, `denied`, `token`, `credential`..., ou `login`/`auth` com `failed`/`invalid`/`locked`...) → `security`; `login`, `logout`, `permission`, `created by`... → `audit`; `database`, `timeout`, `connection`... → `system`; linha JSON ou `timestamp nível` sem palavra-chave → `application`; senão `unknown`. A categoria não muda o status: `normalized` só quando timestamp e mensagem foram lidos.
+
+**Reimportação:** cada linha recebe `external_id = file:` + 32 caracteres hex de `sha256(nome do arquivo, número da linha, conteúdo)`. Reimportar o mesmo arquivo, de qualquer diretório, não grava nada novo. Mesmo nome, linha e conteúdo em arquivos diferentes contam como o mesmo evento (spec 0004).
+
+**Desempenho:** a conexão do import usa `synchronous_commit=off`. Medido num i5-1135G7 com PostgreSQL 16 em Docker: 80.266 linhas em 34s (334s com commit síncrono). Se o PostgreSQL cair no meio, os commits dos últimos ~0,6s podem se perder, sem corromper nada; basta reimportar.
+
+Saída real com `examples/logs/` num banco vazio:
 
 ```text
 Log import summary
-Files processed: 2
-Lines read: 482
-Persisted: 482
-Normalized: 301
-Partially interpreted: 143
-Uncategorizable: 38
+Files processed: 3
+Lines read: 434
+Persisted: 429
+Duplicates (already imported): 0
+Blank lines skipped: 5
+Normalized: 378
+Partially interpreted: 20
+Uncategorizable: 31
 ```
 
-Cada evento importado recebe `ingestion_channel=file`, `raw_line`, `normalization_status`, `parse_error` e `payload._ingestion` (arquivo, linha, formato, parser).
+Erros de gravação aparecem como `Persistence errors: N`, seguidos de até 10 linhas `arquivo:linha: motivo`.
+
+### 5.4 Dados de exemplo e demonstração
+
+- **`examples/logs/`**: 434 linhas sintéticas de 2026-03-01 a 2026-03-14 de uma aplicação fictícia, em três formatos (`checkout-api.log` JSON, `auth-service.log` `timestamp nível mensagem`, `legacy-gateway.log` texto livre). Pico de erros em 2026-03-10 (banco fora por 90 minutos, com um `fatal`), falhas de login em massa em 2026-03-06, linhas cortadas, sem timestamp e em branco. Usuários `user-NNNN` e IPs só das faixas de documentação (RFC 5737).
+- **`tools/loggen`**: gerador desses arquivos, com semente fixa. `go run ./tools/loggen -out examples/logs` reproduz exatamente os arquivos versionados (há teste); `-scale N -out <dir>` gera volumes maiores, que não devem ser versionados.
+- **`make demo`** (`scripts/demo.sh`): sobe o compose, importa os exemplos com a CLI dentro do container, envia eventos por `curl` e roda `events list` e `metrics errors`. Exige só Docker e `curl`. Saída real completa: [`demo-output.txt`](./demo-output.txt).
+- **`docs/demo.tape`**: roteiro do [VHS](https://github.com/charmbracelet/vhs) para gravar `docs/demo.gif` com o stack no ar (`vhs docs/demo.tape`).
+
+---
+
+## 6. Normalização e fallback
+
+- `occurred_at` ausente ou inválido → `received_at`; `message` vazia → texto padrão; `category` inválida → `unknown`.
+- `application_id`, `source_id` ou `environment_id` ausente ou não-UUID → o do setup. Se o UUID não existir no banco, o `INSERT` falha por FK e o caso de uso tenta **uma** vez com o setup.
+- O setup usado no fallback é sempre o registro **mais antigo** de cada tabela, mesmo que o `init` tenha sido rodado depois com outra chave.
+- Toda troca é anotada em `payload._ingestion.normalization_warnings`.
 
 ---
 
 ## 7. Regras de negócio
 
-### 7.1 Setup e fallback
+### 7.1 Timestamps
 
-- `init` grava application, environment e source. `serve` e `import` falham se o setup não existir.
-- Quando um ID de referência está ausente ou não é UUID, o caso de uso usa o setup do banco e anota o fato em `payload._ingestion.normalization_warnings`.
-- Se o INSERT falhar por FK inexistente (`application_id`, `source_id` ou `environment_id`), o caso de uso recarrega o setup e tenta **uma** vez novamente.
+`occurred_at` é o que o cliente informou (pode estar errado em máquinas de usuários); `received_at` é definido pelo servidor. Um nunca sobrescreve o outro, exceto no fallback acima.
 
-### 7.2 Normalização
+### 7.2 Deduplicação
 
-Aplicada em `register_technical_event_usecase.go`:
+Unicidade em `(application_id, external_id)` onde `external_id` não é nulo (índice parcial). O `INSERT` usa `ON CONFLICT DO NOTHING` e, sem linha criada, devolve o evento existente; não há corrida entre duas requisições iguais.
 
-- `occurred_at` ausente ou inválido → `received_at`;
-- `message` vazia → texto padrão;
-- `category` inválida → `unknown`;
-- `normalization_status` inválido → `partial`;
-- `ingestion_channel` deve ser `http`, `cli` ou `file`.
+### 7.3 Severidade
 
-### 7.3 Derivação de severidade
+A primeira regra que casar vence. Palavras da mensagem são comparadas inteiras, sem diferenciar maiúsculas; a lista completa, com flexões, fica em `register_technical_event_usecase.go`.
 
-Ordem de avaliação (a primeira regra que casar vence). As palavras da mensagem são comparadas como **palavras inteiras**, sem diferenciar maiúsculas; a lista completa, com flexões (`crashed`, `timeouts`...), fica em `register_technical_event_usecase.go`.
+1. **Só fora do HTTP** (import): `payload.level` reconhecido (`trace`/`debug`, `info`, `warn`/`warning`, `error`/`err`, `fatal`/`critical`/`panic`).
+2. `panic`, `fatal`, `unrecoverable`, `crash` (e flexões) na mensagem, ou `panic`/`fatal`/`stack_trace` no payload → `fatal`.
+3. `error`, `failed`, `failure`, `timeout`, `exception`, `unauthorized`, `denied` (e flexões), um tipo CamelCase terminado em `Error`/`Exception`, ou `error`/`errors`/`exception`/`exception_message` no payload → `error`.
+4. Categoria `security`, `warn`, `warning`, `retry`, `deprecated`, `slow`, `fallback` (e flexões), ou `warning`/`warnings`/`retry_count` no payload → `warn`.
+5. Senão → `info`.
 
-1. **Só fora do HTTP** (ex.: `import logs`): `payload.level` com valor reconhecido (`trace`/`debug`, `info`, `warn`/`warning`, `error`/`err`, `fatal`/`critical`/`panic`). No HTTP esse campo é ignorado para a severidade.
-2. Mensagem tem `panic`, `fatal`, `unrecoverable`, `crash` (e flexões), **ou** payload tem `panic`, `fatal` ou `stack_trace` com valor significativo → `fatal`.
-3. Mensagem tem `error`, `failed`, `failure`, `timeout`, `exception`, `unauthorized`, `denied` (e flexões), **ou** um nome de tipo CamelCase terminado em `Error`/`Exception` (`TypeError`, `IOException`), **ou** payload tem `error`, `errors`, `exception` ou `exception_message` → `error`.
-4. Categoria `security`, **ou** mensagem tem `warn`, `warning`, `retry`, `deprecated`, `slow`, `fallback` (e flexões), **ou** payload tem `warning`, `warnings` ou `retry_count` → `warn`.
-5. Caso contrário → `info`.
+**Limitação:** é uma heurística sem noção de negação ou contexto. `0 errors found`, `report generated without failure` e `retry succeeded after timeout` viram `error` (documentado em `severity_test.go`).
 
-Limitações conhecidas (documentadas em `severity_test.go`): a heurística não entende negação nem contexto. `0 errors found`, `report generated without failure` e `retry succeeded after timeout` continuam `error`.
+### 7.4 `metrics errors`
 
-### 7.4 Métricas
+Conta `error` e `fatal` em colunas separadas, por dia em UTC, independentemente do fuso da sessão do PostgreSQL. Dias sem `error` nem `fatal` não aparecem (preencher dias vazios é da camada de apresentação). Saída real da demo:
 
-`metrics errors` conta `severity = 'error'` e `severity = 'fatal'` em colunas separadas (`ERRORS`, `FATAL`, `TOTAL`), agrupando por dia em UTC, independentemente do fuso do PostgreSQL. Dias sem `error` nem `fatal` não aparecem. Tabela e resumo vão para a saída padrão.
+```text
+$ tracelog metrics errors --from 2026-03-01 --to 2026-03-14
+DATE        ERRORS  FATAL  TOTAL
+----        ------  -----  -----
+2026-03-01  2       0      2
+2026-03-02  2       0      2
+2026-03-03  1       0      1
+2026-03-05  1       0      1
+2026-03-06  1       0      1
+2026-03-08  1       0      1
+2026-03-09  2       0      2
+2026-03-10  25      1      26
+2026-03-11  1       0      1
+2026-03-13  1       0      1
+2026-03-14  2       0      2
+
+Summary:
+  Days with errors: 11
+  Errors: 39
+  Fatal: 1
+  Average (error+fatal) per day with errors: 3.6
+```
 
 ---
 
-## 8. Testes
+## 8. Modelo de dados
 
-### 8.1 Rodar
+Tabelas (nomes no singular), de `migrations/`:
 
-```bash
-go test ./...                                   # tudo
-go test -v ./internal/core/services/...         # um pacote, verboso
-go test -v -run TestImportLogFiles ./internal/core/services/   # um teste
-go test -coverprofile=coverage.out ./...        # cobertura
-go tool cover -html=coverage.out
-```
+| Tabela | Colunas principais | Restrições |
+|--------|--------------------|------------|
+| `environment` | `id`, `code`, `name`, `description`, `created_at` | `code` único |
+| `monitored_application` | `id`, `name`, `service_key`, `description`, `created_at` | `service_key` único |
+| `event_source` | `id`, `name`, `source_type`, `description`, `created_at` | `(name, source_type)` único |
+| `technical_event` | `id`, `external_id`, `occurred_at`, `received_at`, `message`, `severity`, `category`, `payload` (JSONB), `trace_id`, `correlation_id`, `raw_line`, `normalization_status`, `parse_error`, `ingestion_channel`, `application_id`, `source_id`, `environment_id`, `created_at` | FKs para as três tabelas acima; único parcial `(application_id, external_id)` |
+| `schema_migrations` | `version`, `applied_at` | criada pelo `tracelog migrate` |
 
-Estado na fase 2 (2026-11-20): `go vet ./...` limpo e `go test -race ./...` passando, inclusive os testes de integração com PostgreSQL 16.
+Índices de `technical_event`: `occurred_at DESC`, `severity`, `application_id`, `environment_id`, `trace_id`, `correlation_id`, `normalization_status` e o único parcial de deduplicação. Nenhum foi ajustado por medição; a fase 5 (opcional) do `PROGRESS.md` trata disso.
 
-### 8.2 Cobertura atual dos testes
-
-| Pacote | Testes | O que cobre |
-|--------|--------|-------------|
-Contagem de funções `Test*` de nível superior (subtestes de tabela não somados):
-
-| Pacote | Testes | O que cobre |
-|--------|--------|-------------|
-| `internal/core/services` | 19 | Tabela da heurística de severidade, `payload.level` por canal, fallback de IDs e retry só para `ErrReferenceNotFound`, truncagem, corpo bruto, UUID, duplicata, importação, `init`, listagem. |
-| `internal/adapters/http` | 15 | Handler com `httptest` (201, 200 duplicata, JSON inválido gravado, 405, 413, 415, contexto, erro sem vazamento, fallback de FK), `/health`, `/ready`, graceful shutdown. |
-| `internal/adapters/repository` | 7 | 4 de integração com PostgreSQL (deduplicação, FK, filtros, `metrics errors` em UTC) + pool e mapeamento de erro de FK. |
-| `internal/config` | 4 | Defaults, obrigatórias, `.env`, validação de `HTTP_MAX_BODY_BYTES`. |
-| `cmd` | 2 | Saída de `metrics errors` e limites de `--from`/`--to`. |
-
-Os testes de `services` e `http` usam fakes em memória. Os de integração só rodam com `TRACELOG_TEST_DATABASE_URL` (ex.: `postgres://postgres:postgres@127.0.0.1:5432/tracelog?sslmode=disable`); cada teste cria e apaga um schema próprio, sem tocar nas tabelas existentes. Sem a variável eles aparecem como `SKIP`. O CI roda com um PostgreSQL 16 de serviço.
-
-### 8.3 Teste manual de ponta a ponta
-
-Com o PostgreSQL no ar, migrations aplicadas e `init` executado:
-
-```bash
-# terminal 1
-go run . serve
-
-# terminal 2
-curl -s http://localhost:8080/health
-curl -s -X POST http://localhost:8080/events -H "Content-Type: application/json" \
-  -d '{"message":"Teste manual: timeout no banco","occurred_at":"2026-03-09T14:30:00Z","category":"system","application_id":"<app>","source_id":"<src>","environment_id":"<env>"}'
-go run . events list --limit 5
-go run . metrics errors
-```
-
-Para importar um arquivo de teste:
-
-```bash
-printf '%s\n' '2026-03-09T14:30:00Z ERROR connection timeout to postgres' '{"level":"warn","message":"retry 2"}' 'linha qualquer' > /tmp/tracelog-sample.log
-go run . import logs --file /tmp/tracelog-sample.log
-```
-
-### 8.4 Lacunas de teste
-
-- O `docs/development.md` descreve um banco `tracelog_test`; os testes de integração reais usam `TRACELOG_TEST_DATABASE_URL` (seção 8.2).
-- Os comandos da CLI só têm testes das funções de saída e de parsing, não da execução contra banco.
+Valores: `severity` ∈ `debug`, `info`, `warn`, `error`, `fatal`; `category` ∈ `application`, `system`, `security`, `audit`, `unknown`; `ingestion_channel` ∈ `http`, `file` (`cli` existe no domínio, mas nenhum comando o usa); `normalization_status` ∈ `normalized`, `partial`, `uncategorizable`.
 
 ---
 
-## 9. Estrutura do projeto
+## 9. Arquitetura
 
 ```text
 tracelog/
-├── main.go                       # entrada: chama cmd.Execute()
-├── cmd/                          # adapters de CLI (Cobra)
-│   ├── root.go                   # carrega config antes de qualquer comando
-│   ├── init.go  serve.go  seed.go
-│   ├── events.go  metrics.go  db.go  import.go
+├── main.go                     # chama cmd.Execute()
+├── cmd/                        # CLI (Cobra): serve, migrate, init, import, events, metrics, db
 ├── internal/
-│   ├── config/config.go          # .env + variáveis de ambiente, validação
+│   ├── config/                 # .env + ambiente, validação, DSN
 │   ├── core/
-│   │   ├── domain/               # entidades e enums (sem dependências externas)
-│   │   ├── ports/                # interfaces dos repositórios
-│   │   └── services/             # casos de uso (+ testes com fakes)
+│   │   ├── domain/             # entidades e enums, sem dependências externas
+│   │   ├── ports/              # interfaces dos repositórios
+│   │   └── services/           # casos de uso (testes com fakes)
 │   └── adapters/
-│       ├── http/                 # server.go, event_handler.go, dto.go
-│       └── repository/           # PostgreSQL (pgx/v5 via database/sql)
-├── migrations/                   # SQL aplicado por scripts/run-migrations.sh
-├── scripts/run-migrations.sh
-├── docker-compose.yml            # serviço postgres:16-alpine
-├── .env.example
-└── docs/                         # documentação
+│       ├── http/               # servidor, handler, DTOs
+│       └── repository/         # PostgreSQL (pgx/v5 via database/sql) e migrator
+├── migrations/                 # *.sql + embed.go
+├── tools/loggen/               # gerador do dataset
+├── examples/logs/              # dataset versionado
+├── scripts/demo.sh             # demonstração
+├── Dockerfile, docker-compose.yml, Makefile
+└── .github/workflows/ci.yml
 ```
 
-Fluxo de dependência: `cmd`/`http` → `services` → `ports` ← `repository`. O domínio não depende de nada externo.
+Dependências apontam para dentro: `cmd` e `adapters/http` chamam `services`, que só conhecem `domain` e `ports`; `adapters/repository` implementa os `ports`. Dependências diretas: `github.com/jackc/pgx/v5` e `github.com/spf13/cobra`.
 
-Dependências diretas (`go.mod`): `github.com/jackc/pgx/v5` e `github.com/spf13/cobra`.
+**Desvios conscientes da arquitetura:**
 
----
-
-## 10. Como estender
-
-- **Novo caso de uso:** `internal/core/services/` + teste com fake do repositório.
-- **Novo método de persistência:** declarar em `internal/core/ports/`, implementar em `internal/adapters/repository/`.
-- **Nova rota HTTP:** registrar em `internal/adapters/http/server.go`.
-- **Novo comando CLI:** arquivo em `cmd/` com `rootCmd.AddCommand(...)` no `init()`.
-- **Nova migration:** `migrations/00000N_descricao.sql`, **idempotente** (`IF NOT EXISTS`), porque o script reaplica tudo.
-- **Commits:** Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `test:`), como no histórico atual.
+- `cmd/db.go` (`db list`) executa SQL direto no comando, sem caso de uso nem port. É só leitura de inspeção; corrigir é mover as três consultas para o repositório.
+- `cmd/migrate.go` chama `repository.Migrate` sem caso de uso: migração é infraestrutura, não regra de negócio (spec 0003).
+- Parte da saída de `init`, `serve`, `events list` e `db list` vai para stderr (`cmd.Println` do Cobra); a tabela vai para stdout. `metrics errors` e `import logs` escrevem tudo em stdout.
 
 ---
 
-## 11. Limitações conhecidas
+## 10. Testes
 
-1. **Migrations sem controle de versão** (seção 4.4).
-2. **Truncagem de `external_id`**: dois valores longos com os mesmos 255 primeiros caracteres viram o mesmo evento (risco aceito na spec 0002).
-3. **Sem validação de `message`** no HTTP: qualquer valor é aceito e normalizado.
-4. **Sem autenticação, rate limiting ou versionamento** de API (`/v1`). Documentado como futuro.
-5. **Heurística de severidade** não entende negação (seção 7.3).
-6. **`seed` não popula nada.**
-7. **`--help` exige `.env` válido.**
-8. Não há Makefile (previsto para a fase 3). O CI está em `.github/workflows/ci.yml`: gofmt, `go vet`, `go test -race` com PostgreSQL e build.
+```bash
+go test ./...                                    # sem banco: testes de integração ficam em SKIP
+TRACELOG_TEST_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/tracelog?sslmode=disable' \
+  go test -race ./...                            # com integração
+```
 
----
+| Pacote | Funções `Test*` | Cobre |
+|--------|-----------------|-------|
+| `internal/core/services` | 26 | Tabelas de severidade, categoria e parser; normalização, truncagem, fallback e retry; duplicata; import (linhas vazias, erros, reimportação); `init`; listagem |
+| `internal/adapters/http` | 15 | Handler com `httptest` (201, 200, 405, 413, 415, JSON inválido, contexto, erro sem vazamento, fallback), `/health`, `/ready`, shutdown |
+| `internal/adapters/repository` | 11 | 7 de integração com PostgreSQL (deduplicação, FK, filtros, `metrics` em UTC, migrate, adoção de banco legado, idempotência do setup), pool, DSN do import, erro de FK |
+| `internal/config` | 5 | Defaults, obrigatórias, `.env`, `HTTP_MAX_BODY_BYTES`, escape do DSN |
+| `cmd` | 5 | Saídas de `metrics` e `import`, `--from`/`--to`, `init --defaults` |
+| `tools/loggen` | 2 | Determinismo e igualdade com `examples/logs` |
 
-## 12. Divergências conhecidas na documentação
+Os testes de integração criam e apagam um schema próprio por teste, sem tocar nas tabelas existentes. O CI (`.github/workflows/ci.yml`) roda gofmt, `go vet`, `go test -race` contra um PostgreSQL 16 de serviço, `go build` e, num segundo job, `docker build` com checagem de que a imagem não roda como root.
 
-Os arquivos abaixo ainda descrevem comportamentos que não existem. Corrija-os antes de confiar neles.
-
-| Documento | Afirmação | Realidade no código |
-|-----------|-----------|---------------------|
-| `README.md`, `docs/getting-started.md` | Go 1.25+ | `go.mod` declara 1.26.11 |
-| `docs/development.md` | Go 1.21+ | `go.mod` declara 1.26.11 |
-| `docs/http-api.md`, `docs/development.md` | `severity` obrigatório/enviado no `POST /events` | Ignorado; severidade é derivada |
-| `docs/http-api.md` | `400` para campos ausentes, `message is required`, JSON inválido | Não existe; dados são normalizados e gravados com `201` |
-| `docs/cli.md`, `docs/getting-started.md` | `seed` popula ambientes, apps e fontes | `seed` só imprime mensagem |
-| `docs/architecture.md`, `docs/domain.md` | Tabelas `technical_events`, `monitored_applications`, `environments`, `event_sources` | Nomes reais: `technical_event`, `monitored_application`, `environment`, `event_source` |
-| `docs/development.md` | Migration `000002_bootstrap_data.sql`; seeds nas migrations | Não existe; a `000002` é `add_log_import_fields`; seeds removidos (`484fea9`) |
-| `docs/development.md` | `scripts/setup-demo-data.sh`, `scripts/seed-error-data.sh` | Não existem |
-| `docs/architecture.md` | Driver `github.com/lib/pq` | Driver real: `pgx/v5` (stdlib) |
-| `docs/development.md` | `.env` na raiz e `go run . serve` funcionam de qualquer pasta | `.env` é lido do diretório atual |
-| `docs/domain.md` | Canal `file` "futuro" | Implementado (`import logs`) |
-| `docs/cli.md` | Colunas de `events list`: `MESSAGE` antes de `SEVERITY` | Ordem real: `OCCURRED_AT SEVERITY APPLICATION_ID ENVIRONMENT_ID MESSAGE` |
+Lacuna: não há teste automatizado de ponta a ponta da CLI contra banco; a demo cumpre esse papel manualmente.
 
 ---
 
-## 13. Próximos passos sugeridos
+## 11. Como estender
 
-Itens não implementados ou que merecem decisão antes de avançar:
-
-1. **Corrigir a documentação** conforme a seção 12 (ou consolidar `docs/` em torno deste guia).
-2. **Controle de migrations**: tabela de versões no banco ou ferramenta dedicada, em vez de reaplicar tudo.
-3. **Lote e `external_id` obrigatório** (spec 0001, D3 e D5), adiados para depois da v0.1.0.
-4. **Testes de ponta a ponta da CLI** contra banco (`init` → `POST /events` → `events list`).
-5. **Validação de entrada HTTP** (ex.: `message` obrigatória) versus a política atual de ingestão tolerante.
-6. **Ferramentas de DX**: `Makefile` com `build`, `test`, `vet`, `migrate`, ou documentar a ausência.
-7. **Integração RabbitMQ** (`internal/adapters/amqp/`), conforme `docs/architecture.md`.
+- **Caso de uso:** `internal/core/services/` + teste com fake do repositório.
+- **Persistência:** declarar em `internal/core/ports/`, implementar em `internal/adapters/repository/`, cobrir com teste de integração.
+- **Rota HTTP:** `internal/adapters/http/server.go`, com teste `httptest`.
+- **Comando:** arquivo em `cmd/` com `rootCmd.AddCommand(...)`; escrever em `cmd.OutOrStdout()`.
+- **Migration:** `migrations/NNNNNN_descricao.sql`, idempotente e com `BEGIN`/`COMMIT`. Nunca edite uma já commitada.
+- **Mudança de contrato** (rota, resposta, comando, schema, configuração): spec em `docs/specs/` antes do código.
 
 ---
 
-**Última atualização deste guia:** fase 2, spec 0002 (2026-11-20).
+## 12. Limitações conhecidas
+
+1. Sem autenticação, TLS e rate limit (spec 0003, seção 5).
+2. Heurística de severidade sem negação (seção 7.3).
+3. Truncagem de `external_id`: valores longos com os mesmos 255 primeiros caracteres viram o mesmo evento (spec 0002).
+4. Import: mesmo nome de arquivo, linha e conteúdo em arquivos diferentes viram o mesmo evento (spec 0004); com `synchronous_commit=off`, uma queda do PostgreSQL pode perder os últimos ~0,6s de commits.
+5. Fallback sempre usa o setup mais antigo (seção 6).
+6. `--help` exige as variáveis do banco; o `.env` não aceita comentário no fim da linha.
+7. `events list` corta a mensagem em 100 bytes e pode quebrar um caractere UTF-8 no meio; `--limit` não tem teto.
+8. Migrations não têm *down*: correção é sempre uma migration nova.
+
+---
+
+## 13. Próximos passos
+
+Na ordem do roadmap do `AGENTS.md`:
+
+1. Núcleo de investigação: entrada por pipe, busca, agrupamento por fingerprint, visão por `trace_id`.
+2. SQLite como padrão, com PostgreSQL opcional (exige reescrever a camada de repositório).
+3. API JSON de leitura e UI web embutida.
+4. MCP e busca em linguagem natural.
+5. Dashboards.
+
+Pendências do MVP: lote e `external_id` obrigatório (spec 0001, D3/D5); mover `cmd/db.go` para o repositório; saída da CLI toda em stdout; teste de ponta a ponta da CLI.

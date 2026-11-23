@@ -27,3 +27,5 @@ Thumbs.db
 
 # log files 
 *.log
+# Dados de exemplo versionados (gerados por tools/loggen)
+!examples/logs/*.log

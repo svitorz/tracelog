@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -119,5 +120,119 @@ func basicSetupFixture() ports.BasicSystemSetup {
 		Application: domain.MonitoredApplication{ID: "550e8400-e29b-41d4-a716-446655440010"},
 		Environment: domain.Environment{ID: "770e8400-e29b-41d4-a716-446655440012"},
 		Source:      domain.EventSource{ID: "660e8400-e29b-41d4-a716-446655440011"},
+	}
+}
+
+func TestImportLogFilesUseCaseSkipsBlankLines(t *testing.T) {
+	repo := &stubTechnicalEventRepository{}
+	registerUC := NewRegisterTechnicalEventUseCase(repo, &stubSystemSetupRepository{saved: basicSetupFixture()})
+	importUC := NewImportLogFilesUseCase(registerUC)
+	importUC.openFile = func(string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader("first line\n\n   \t\nsecond line\n")), nil
+	}
+
+	result, err := importUC.Execute(context.Background(), ImportLogFilesInput{Files: []string{"app.log"}})
+	if err != nil {
+		t.Fatalf("Execute() unexpected error = %v", err)
+	}
+
+	if result.LinesRead != 4 || result.BlankSkipped != 2 || result.Persisted != 2 {
+		t.Fatalf("LinesRead=%d BlankSkipped=%d Persisted=%d, want 4, 2, 2", result.LinesRead, result.BlankSkipped, result.Persisted)
+	}
+	if repo.saves != 2 {
+		t.Fatalf("repo.Save calls = %d, want 2 (blank lines are not stored)", repo.saves)
+	}
+}
+
+func TestImportLogFilesUseCaseReportsFailedLines(t *testing.T) {
+	repo := &stubTechnicalEventRepository{err: errors.New("connection refused")}
+	registerUC := NewRegisterTechnicalEventUseCase(repo, &stubSystemSetupRepository{saved: basicSetupFixture()})
+	importUC := NewImportLogFilesUseCase(registerUC)
+	importUC.openFile = func(string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(strings.Repeat("some line\n", 12))), nil
+	}
+
+	result, err := importUC.Execute(context.Background(), ImportLogFilesInput{Files: []string{"app.log"}})
+	if err != nil {
+		t.Fatalf("Execute() unexpected error = %v", err)
+	}
+
+	if result.PersistenceError != 12 {
+		t.Fatalf("PersistenceError = %d, want 12", result.PersistenceError)
+	}
+	if len(result.Errors) != maxReportedImportErrors {
+		t.Fatalf("len(Errors) = %d, want %d", len(result.Errors), maxReportedImportErrors)
+	}
+	first := result.Errors[0]
+	if first.File != "app.log" || first.Line != 1 || !strings.Contains(first.Reason, "connection refused") {
+		t.Fatalf("Errors[0] = %+v, want app.log line 1 with the repository error", first)
+	}
+	if result.Errors[9].Line != 10 {
+		t.Fatalf("Errors[9].Line = %d, want 10", result.Errors[9].Line)
+	}
+}
+
+// dedupRepository mimics the per-application deduplication of the PostgreSQL adapter.
+type dedupRepository struct {
+	seen map[string]bool
+}
+
+func (r *dedupRepository) Save(_ context.Context, event *domain.TechnicalEvent) (bool, error) {
+	key := event.ApplicationID + "|" + event.ExternalID
+	if event.ExternalID != "" && r.seen[key] {
+		return false, nil
+	}
+	r.seen[key] = true
+	return true, nil
+}
+
+func (r *dedupRepository) FindByFilters(context.Context, ports.TechnicalEventFilters) ([]domain.TechnicalEvent, error) {
+	return nil, nil
+}
+
+func TestImportLogFilesUseCaseReimportDoesNotDuplicate(t *testing.T) {
+	repo := &dedupRepository{seen: map[string]bool{}}
+	registerUC := NewRegisterTechnicalEventUseCase(repo, &stubSystemSetupRepository{saved: basicSetupFixture()})
+	importUC := NewImportLogFilesUseCase(registerUC)
+	content := "2026-03-09T12:00:00Z INFO started\n\n2026-03-09T12:00:01Z ERROR failed\n"
+	importUC.openFile = func(string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(content)), nil
+	}
+
+	first, err := importUC.Execute(context.Background(), ImportLogFilesInput{Files: []string{"logs/app.log"}})
+	if err != nil {
+		t.Fatalf("first Execute() error = %v", err)
+	}
+	// Same file name from another directory, as when importing from a container mount.
+	second, err := importUC.Execute(context.Background(), ImportLogFilesInput{Files: []string{"/examples/app.log"}})
+	if err != nil {
+		t.Fatalf("second Execute() error = %v", err)
+	}
+
+	if first.Persisted != 2 || first.Duplicates != 0 {
+		t.Fatalf("first import Persisted=%d Duplicates=%d, want 2 and 0", first.Persisted, first.Duplicates)
+	}
+	if second.Persisted != 0 || second.Duplicates != 2 || second.BlankSkipped != 1 {
+		t.Fatalf("second import Persisted=%d Duplicates=%d BlankSkipped=%d, want 0, 2, 1", second.Persisted, second.Duplicates, second.BlankSkipped)
+	}
+}
+
+func TestImportedLineExternalID(t *testing.T) {
+	base := importedLineExternalID("logs/app.log", 7, "line content")
+
+	if !strings.HasPrefix(base, "file:") || len(base) != len("file:")+32 {
+		t.Fatalf("importedLineExternalID() = %q, want file: + 32 hex chars", base)
+	}
+	if got := importedLineExternalID("/other/dir/app.log", 7, "line content"); got != base {
+		t.Fatalf("same base name in another directory = %q, want %q", got, base)
+	}
+	for name, got := range map[string]string{
+		"other line number": importedLineExternalID("logs/app.log", 8, "line content"),
+		"other content":     importedLineExternalID("logs/app.log", 7, "line content!"),
+		"other file name":   importedLineExternalID("logs/worker.log", 7, "line content"),
+	} {
+		if got == base {
+			t.Errorf("%s produced the same external_id %q", name, got)
+		}
 	}
 }
