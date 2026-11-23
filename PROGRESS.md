@@ -272,7 +272,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 
 ## Fase atual (Trilha 2)
 
-**Fase 1 concluída:** spec 0005 aprovada pelo autor (2026-11-23) em `feat/read-api`. Esperando o "continuar" para a Fase 2 (implementação), e o OK para a refatoração do `cmd/db.go`.
+**Fase 2 (implementação da API de leitura) concluída** em `feat/read-api`, sem push. Pendente: decisão do autor sobre o índice `(severity, occurred_at DESC, id DESC)` (medido abaixo) e push/PR pelo autor. A Fase 3 só começa com `feat/read-api` mesclado no `main` e CI verde.
 
 ## Checklist (Trilha 2)
 
@@ -280,7 +280,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 |------|--------|--------|
 | 0. Orientação e portão | `feat/read-api` | concluída; P0–P4 satisfeitos |
 | 1. Spec 0005 (API de leitura) | `feat/read-api` | concluída; aprovada em 2026-11-23 |
-| 2. Implementação da API de leitura | `feat/read-api` | pendente |
+| 2. Implementação da API de leitura | `feat/read-api` | concluída; índice aguardando decisão; sem push |
 | 3. Spec 0006 (interface web) | a definir (parte do `main` após o merge da fase 2) | pendente |
 | 4. Scaffold de `web/` e CI | `feat/web-dashboard` | pendente |
 | 5. Telas (Eventos, Detalhe, Visão geral) | `feat/web-dashboard` | pendente |
@@ -289,8 +289,9 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 
 ## Decisões pendentes (Trilha 2)
 
-1. OK para refatorar `cmd/db.go` para o novo `ReferenceDataRepository` (commit separado, Fase 2).
-2. Dataset com uma aplicação só (spec 0005, questão 2): decidir antes da Fase 6.
+1. ~~OK para refatorar `cmd/db.go`.~~ Dado pelo autor; feito em commit separado (`refactor:`).
+2. **Índice `(severity, occurred_at DESC, id DESC)`**: medição na seção "Medições (Trilha 2, Fase 2)". Decisão do autor.
+3. Dataset com uma aplicação só (spec 0005, questão 2): decidir antes da Fase 6.
 
 ## Log de decisões (Trilha 2)
 
@@ -298,6 +299,14 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 |------|---------|--------|
 | 2026-11-23 | Antecipar "API JSON e UI web" (roadmap item 4) e dashboards (item 6) para antes do núcleo de investigação (item 1) e do SQLite (item 2) | Decisão do autor (portfólio). Custo: a leitura nasce sobre a camada PostgreSQL específica; quando o SQLite vier, as consultas novas também terão de ser reescritas. Mitigação: leitura atrás de ports, SQL só nos adapters |
 | 2026-11-23 | Spec 0005 aprovada com todas as recomendações: `/api/v1` (sem espelhar `POST /events`); keyset `(occurred_at, id)` com cursor opaco não assinado; dias vazios preenchidos no Go com `from`/`to` obrigatórios e teto de 366 dias; lista sem `payload`/`raw_line`/`parse_error`, detalhe completo; `HTTP_HOST` padrão `127.0.0.1` (compose `0.0.0.0`), sem CORS; `limit` 1–200 e `400` estrito com `code`/`field`; `data-range` com 14 dias até o erro mais recente; índice só com medição; três rotas de referência; sem severidade múltipla; cursor reaproveitável entre filtros | Decisão do autor; justificativas e alternativas descartadas na spec 0005 §8 |
+| 2026-11-23 | Novo caso de uso `ListEventsPageUseCase` em vez de mudar `ListTechnicalEventsUseCase` | A CLI não tem teto de `limit` e a spec 0005 exclui mudanças na CLI; os dois compartilham o port. Descartado: um caso de uso com modo "estrito" (flag que muda a validação) |
+| 2026-11-23 | `Limit *int` no input da página | Distingue ausente (padrão 50) de `limit=0` (400) sem o adapter decidir o padrão |
+| 2026-11-23 | Parsing de query string e cursor no adapter HTTP; faixas, `from <= to`, UUID e período máximo nos casos de uso | Codificação é detalhe de transporte; regra vale para qualquer adapter (MCP no futuro) |
+| 2026-11-23 | Parser de `from`/`to` duplicado no adapter HTTP (o da CLI fica em `cmd/events.go`) | Unificar seria refatoração da CLI, fora do escopo da fase; registrado em achados |
+| 2026-11-23 | `data-range` com três subconsultas | `MIN`/`MAX` isolados usam o índice de `occurred_at` (Index Only Scan); um agregado só com `FILTER` faria Seq Scan |
+| 2026-11-23 | `ENV HTTP_HOST=0.0.0.0` também no `Dockerfile`, além do compose | Sem isso, `docker run -p` fora do compose ficaria inalcançável; registrado na spec 0005 §4.7 |
+| 2026-11-23 | Fixtures golden comparadas byte a byte depois de `json.Indent`, regravadas com `-update` | Legíveis para o front e estritas em campo e ordem; mudança de contrato exige regravar conscientemente |
+| 2026-11-23 | README: só as frases que ficaram falsas e o diagrama | Deixar "one HTTP endpoint" e "`db list` direto" após o merge seria documentação falsa; a seção do dashboard é da fase 7 |
 | 2026-11-23 | Verificação da Fase 0 em clone limpo (`git clone` local em scratch) e ambiente descartável: Postgres `tracelog-t2p0-pg` em `127.0.0.1:55440`, demo com projeto compose `tracelog-t2p0` (`DB_PORT=55441`, `HTTP_PORT=18090`, `--env-file` fora do repositório) | A 5432 local é de outro projeto; nada do `.env` do repositório foi lido ou criado |
 | 2026-11-23 | CI do `main` consultado pela API pública do GitHub (`/commits/<sha>/check-runs`), porque o `gh` não está instalado | Regra: não presumir CI verde |
 
@@ -326,13 +335,42 @@ Limitações: cache quente, uma execução, um volume; os planos com filtro de a
 
 Sobra: volume `tracelog-t2p0_tracelog_postgres_data` (dados sintéticos), somado aos da trilha 1. Nenhum container ficou rodando.
 
+## Medições (Trilha 2, Fase 2)
+
+Mesma máquina. PostgreSQL `16.16-alpine` descartável (`tracelog-t2p2-pg`, 127.0.0.1:55442), `loggen -scale 200` importado (80.266 eventos, 97 MB, uma aplicação e um ambiente), `VACUUM ANALYZE`. `EXPLAIN (ANALYZE, BUFFERS)` das consultas exatas do repositório, três execuções, cache quente.
+
+| Consulta | Plano (sem índice novo) | Tempo (3 execuções, ms) | Com o candidato |
+|----------|-------------------------|-------------------------|-----------------|
+| L1 lista, 1ª página (`LIMIT 51`) | Index Scan `occurred_at` + Incremental Sort | 0,22 / 0,48 / 0,25 | 0,18–0,41 |
+| L2 página profunda por cursor (posição 40.000) | idem, 31 buffers | 0,20 / 0,24 / 0,18 | 0,16–0,36 |
+| L3 `severity=error` | Index Scan `occurred_at`, 26.913 linhas descartadas, 11.027 buffers | 11,5 / 12,9 / 11,3 | **0,19–0,24** |
+| L4 `severity=error` + cursor | idem, 8.401 descartadas | 3,1 / 4,1 / 3,3 | 0,06–0,48 |
+| L5 `severity=fatal` | Index Scan `severity` | 0,05–0,08 | 0,07–0,20 |
+| L6 aplicação + período padrão | Index Scan `occurred_at` | 0,12–0,18 | 0,11–0,16 |
+| F1 frequência de erros (14 dias) | Index Scan `severity` (5.046 linhas) + Sort | 3,3–5,6 | 2,3–2,4 |
+| C1 contagem por severidade (14 dias) | **Seq Scan** (10.087 buffers) | 31,4 / 36,8 / 42,8 | **11,7–13,6** (Index Only Scan) |
+| D1 data-range | 2 Index Only Scan + Index Scan com filtro | 2,1–2,9 | 3,3–5,5 |
+| I1 detalhe por id | Index Scan `technical_event_pkey` | 0,03–0,07 | 0,04–0,15 |
+
+HTTP ponta a ponta (`curl -w %{time_total}`, 5 execuções, servidor no host): lista 3,3–5,9 ms; `severity=error` 15,5–20,9 ms; `limit=200` 3,3–4,4 ms (115 KB); frequência 3,8–9,7 ms; contagem 29,8–51,1 ms; data-range 2,4–6,4 ms; aplicações 0,5–1,7 ms.
+
+Custo do índice candidato `(severity, occurred_at DESC, id DESC)`: 3,9 MB para 80.266 linhas. `INSERT INTO clone SELECT * FROM technical_event` (80.266 linhas, cópia com os mesmos índices) sem/com o candidato: 4.022/5.050, 6.170/6.686, 5.845/6.262 ms, ou seja, +0,4 a +1,0 s (~8 µs por linha). No import real isso é 1–2% de 34–69 s. Imports reais de `-scale 20` (8.064 linhas) sem/com: 5,3/8,1, 5,3/6,5, 8,7/7,1 s, ruído maior que o efeito.
+
+Outras verificações: integração (12 testes, inclusive 9 eventos com 7 timestamps iguais em páginas de 3) com `TRACELOG_TEST_DATABASE_URL`; mutação `occurred_at < cursor` (keyset sem desempate) faz o teste de paginação falhar (`pages = 2, want 3`); `ss -ltn`: `127.0.0.1:18091` sem `HTTP_HOST` e `*:18091` com `0.0.0.0`; `db list` antes/depois da refatoração com `cmp` idêntico em stdout e stderr; `scripts/demo.sh` em projeto compose novo (`tracelog-t2p2`): exit 0 em 46 s, API de leitura respondendo na porta publicada, portas só em `127.0.0.1`, imagem 31,5 MB; exemplos `curl` do guia §5.1.1 capturados contra `examples/logs` importado.
+
+Limitações: uma máquina, cache quente, volume com uma aplicação e um ambiente (filtros por eles não discriminam); o import de hoje levou 68,8 s contra 38,4 s na Fase 0 com o mesmo binário de import e o mesmo volume, o que indica variação da máquina (Docker e disco compartilhados), não regressão: o caminho de escrita não mudou. O diagrama Mermaid do README não foi validado por renderização (sem `mmdc` local).
+
 ## Achados fora de escopo (Trilha 2)
 
 - O mux devolve `404 page not found` em `text/plain` para rotas desconhecidas (padrão do `net/http`), não JSON. A API de leitura vai criar o primeiro 404 de verdade; decidir na spec 0005 se rotas desconhecidas também respondem JSON.
 - `ListTechnicalEventsUseCase` e `GetErrorFrequencyUseCase` devolvem erros de validação como `fmt.Errorf` sem tipo: o adapter HTTP não tem como distinguir 400 de 500 (relevante para a spec 0005).
 - `tools/loggen -scale N` não escala o evento `fatal` (1 em 80 mil); o gráfico de fatais fica quase vazio com o volume grande.
 - Eventos sem timestamp utilizável recebem `occurred_at` = hora do import (comportamento documentado no guia §5.3), o que espalha o dataset de março até o dia do import.
+- `POST /events` devolve `received_at`/`created_at` com o offset do fuso do processo (ex.: `-03:00` com `serve` no host); a leitura normaliza para UTC. Os exemplos do guia mostram `Z` porque a demo roda em container UTC.
+- `docs/demo-output.txt` depende da ordem em que o `docker compose run` mistura stdout e stderr: o `Total: N event(s).` do `events list` (stderr) saiu antes da tabela na captura versionada e depois dela na execução da fase 2. Corrigir de vez exige a saída da CLI toda em stdout (pendência do guia §13).
+- Parser de `from`/`to` duplicado entre `cmd/events.go` e `internal/adapters/http/read_handler.go` (mesma regra); unificar num commit `refactor:` próprio.
+- A mensagem do `serve` ("listening on port N") não mostra o `HTTP_HOST`; mantida para não mudar a saída da CLI sem spec.
 
 ## Próximo passo (Trilha 2)
 
-Autor: responder "continuar" (e dar ou negar o OK para refatorar `cmd/db.go`). Depois: Fase 2 em `feat/read-api`: erros tipados e ports, casos de uso com fakes, repositório com integração, handlers com `httptest` e fixtures, `HTTP_HOST`, medição com `loggen -scale 200`, guia §5.1 e CHANGELOG.
+Autor: decidir o índice candidato (medição acima); depois push de `feat/read-api`, PR para `main`, CI verde e merge. Em seguida: Fase 3 (spec 0006 da interface web), em branch novo a partir do `main` atualizado.
