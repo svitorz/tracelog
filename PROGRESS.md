@@ -272,7 +272,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 
 ## Fase atual (Trilha 2)
 
-**Fase 3 (spec da interface web) entregue para aprovação** em `feat/web-dashboard` (criado do `main` em `6902f5e`, depois do merge do PR #5 com CI verde): `docs/specs/0006-interface-web.md`, status "Proposta". Nenhum código. Esperando as decisões (a)–(k) do autor.
+**Fase 3 concluída:** spec 0006 aprovada pelo autor (2026-11-23) em `feat/web-dashboard`. Esperando o "continuar" para a Fase 4 (scaffold de `web/` e CI).
 
 ## Checklist (Trilha 2)
 
@@ -281,7 +281,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 | 0. Orientação e portão | `feat/read-api` | concluída; P0–P4 satisfeitos |
 | 1. Spec 0005 (API de leitura) | `feat/read-api` | concluída; aprovada em 2026-11-23 |
 | 2. Implementação da API de leitura | `feat/read-api` | concluída; PR #5 mesclado (`6902f5e`), CI verde no `main` |
-| 3. Spec 0006 (interface web) | `feat/web-dashboard` | proposta escrita; aguardando aprovação |
+| 3. Spec 0006 (interface web) | `feat/web-dashboard` | concluída; aprovada em 2026-11-23 |
 | 4. Scaffold de `web/` e CI | `feat/web-dashboard` | pendente |
 | 5. Telas (Eventos, Detalhe, Visão geral) | `feat/web-dashboard` | pendente |
 | 6. Integração e entrega | `docs/dashboard` | pendente |
@@ -292,7 +292,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 1. ~~OK para refatorar `cmd/db.go`.~~ Dado pelo autor; feito em commit separado (`refactor:`).
 2. ~~Índice `(severity, occurred_at DESC, id DESC)`.~~ Aprovado pelo autor; migration 000004.
 3. Dataset com uma aplicação só (spec 0005, questão 2): decidir antes da Fase 6.
-4. Spec 0006, seção 8 (recomendação entre parênteses): (a) servir (embutido com `go:embed`); (b) caminho (`/ui/`); (c) gráfico (SVG próprio); (d) roteamento e dados (React Router + TanStack Query); (e) DOM dos testes (happy-dom); (f) Node (`24.13.0` exato); (g) lint (ESLint sem Prettier); (h) fuso (UTC); (i) idioma da UI (inglês); (j) URL e paginação (cursor na query, anterior pelo histórico); (k) fixtures compartilhadas (sim, alias `@fixtures`).
+4. ~~Spec 0006, seção 8~~ (aprovada com todas as recomendações): (a) servir (embutido com `go:embed`); (b) caminho (`/ui/`); (c) gráfico (SVG próprio); (d) roteamento e dados (React Router + TanStack Query); (e) DOM dos testes (happy-dom); (f) Node (`24.13.0` exato); (g) lint (ESLint sem Prettier); (h) fuso (UTC); (i) idioma da UI (inglês); (j) URL e paginação (cursor na query, anterior pelo histórico); (k) fixtures compartilhadas (sim, alias `@fixtures`).
 
 ## Log de decisões (Trilha 2)
 
@@ -300,6 +300,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 |------|---------|--------|
 | 2026-11-23 | Antecipar "API JSON e UI web" (roadmap item 4) e dashboards (item 6) para antes do núcleo de investigação (item 1) e do SQLite (item 2) | Decisão do autor (portfólio). Custo: a leitura nasce sobre a camada PostgreSQL específica; quando o SQLite vier, as consultas novas também terão de ser reescritas. Mitigação: leitura atrás de ports, SQL só nos adapters |
 | 2026-11-23 | Spec 0005 aprovada com todas as recomendações: `/api/v1` (sem espelhar `POST /events`); keyset `(occurred_at, id)` com cursor opaco não assinado; dias vazios preenchidos no Go com `from`/`to` obrigatórios e teto de 366 dias; lista sem `payload`/`raw_line`/`parse_error`, detalhe completo; `HTTP_HOST` padrão `127.0.0.1` (compose `0.0.0.0`), sem CORS; `limit` 1–200 e `400` estrito com `code`/`field`; `data-range` com 14 dias até o erro mais recente; índice só com medição; três rotas de referência; sem severidade múltipla; cursor reaproveitável entre filtros | Decisão do autor; justificativas e alternativas descartadas na spec 0005 §8 |
+| 2026-11-23 | Spec 0006 aprovada com todas as recomendações: UI embutida com `go:embed` sob `/ui/` (`/` redireciona), build do Vite no módulo Go raiz e `web/go.mod` marcador; gráfico em SVG próprio; React Router + TanStack Query; happy-dom; Node `24.13.0` exato; ESLint sem Prettier; horários em UTC; UI em inglês; filtros e cursor na URL com "anterior" pelo histórico; fixtures de `testdata/api` por alias `@fixtures` | Decisão do autor; justificativas e alternativas descartadas na spec 0006 §8 |
 | 2026-11-23 | Spec 0006 e fase 4 no mesmo branch `feat/web-dashboard` | Como spec 0005 + fase 2 em `feat/read-api`: a spec é aprovada na conversa, sem PR próprio; o PR leva spec e scaffold juntos |
 | 2026-11-23 | Índice `idx_technical_event_severity_occurred_at` por migration 000004 | Decisão do autor (eu havia recomendado esperar: sem ele, toda consulta de tela já ficava abaixo de 45 ms). Ganho medido na lista filtrada e na contagem da Visão geral; custo ~8 µs por linha e 3,9 MB a cada 80 mil eventos. O índice só de `severity` ficou redundante e não foi removido (pede confirmação) |
 | 2026-11-23 | Novo caso de uso `ListEventsPageUseCase` em vez de mudar `ListTechnicalEventsUseCase` | A CLI não tem teto de `limit` e a spec 0005 exclui mudanças na CLI; os dois compartilham o port. Descartado: um caso de uso com modo "estrito" (flag que muda a validação) |
@@ -393,4 +394,4 @@ Método: metadados do registro npm (`/<pacote>/latest`, `unpackedSize`, `engines
 
 ## Próximo passo (Trilha 2)
 
-Autor: decidir (a)–(k) da spec 0006. Depois: status "Aprovada" e Fase 4 (scaffold de `web/` e CI) em `feat/web-dashboard`.
+Autor: responder "continuar". Depois: Fase 4 em `feat/web-dashboard`: `web/` (Vite, React, TS strict, Tailwind, React Router, TanStack Query), `web/go.mod`, cliente HTTP e tipos da spec 0005, lint/typecheck/test/build, alvos `web-*` no `Makefile`, job `web` no CI e página de prova de vida via proxy do Vite.

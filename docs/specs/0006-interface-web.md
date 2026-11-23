@@ -1,6 +1,6 @@
 # Spec 0006: Interface web (dashboard)
 
-- **Status:** Proposta
+- **Status:** Aprovada (todas as recomendações da seção 8 confirmadas pelo autor em 2026-11-23)
 - **Autor:** Vitor Fábio
 - **Data:** 2026-11-23
 - **Escopo:** diretório `web/` (React + TypeScript), como o binário Go serve a UI, job de CI do front, cabeçalhos de segurança da UI
@@ -240,6 +240,8 @@ Recomendação primeiro em cada item.
 - Custo: o front lê um diretório fora de `web/`, então o `.dockerignore` e o contexto do build precisam incluir esse caminho só no estágio de teste. O build de produção não usa as fixtures.
 
 ## 9. Questões em aberto
+
+Nenhuma bloqueia a implementação; as três abaixo são decididas nas fases indicadas.
 
 1. **Dataset com uma aplicação só** (spec 0005, questão 2): os seletores de aplicação e ambiente terão uma opção cada com os dados de exemplo. Recomendo decidir antes da fase 6 (demo); não bloqueia esta spec.
 2. **`Dockerfile` e contexto de build com `web/`**: o `.dockerignore` atual precisa excluir `web/node_modules` e `web/dist`. É detalhe da fase 6, registrado aqui para não ser esquecido.
