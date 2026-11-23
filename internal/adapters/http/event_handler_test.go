@@ -68,6 +68,10 @@ func (r *fakeEventRepository) FindByFilters(context.Context, ports.TechnicalEven
 	return nil, nil
 }
 
+func (r *fakeEventRepository) FindByID(context.Context, string) (domain.TechnicalEvent, error) {
+	return domain.TechnicalEvent{}, ports.ErrNotFound
+}
+
 func (r *fakeEventRepository) count() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()

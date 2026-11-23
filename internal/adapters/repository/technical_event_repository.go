@@ -203,12 +203,20 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 		argPos++
 	}
 
+	if filters.After != nil {
+		// Row comparison matches the ORDER BY below, so equal timestamps are neither
+		// skipped nor repeated across pages.
+		query += fmt.Sprintf(" AND (occurred_at, id) < ($%d, $%d::uuid)", argPos, argPos+1)
+		args = append(args, filters.After.OccurredAt, filters.After.ID)
+		argPos += 2
+	}
+
 	limit := filters.Limit
 	if limit <= 0 {
 		limit = defaultFindLimit
 	}
 
-	query += fmt.Sprintf(" ORDER BY occurred_at DESC LIMIT $%d", argPos)
+	query += fmt.Sprintf(" ORDER BY occurred_at DESC, id DESC LIMIT $%d", argPos)
 	args = append(args, limit)
 	query = strings.TrimSpace(query)
 
@@ -232,6 +240,26 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 	}
 
 	return events, nil
+}
+
+func (r *PostgresTechnicalEventRepository) FindByID(ctx context.Context, id string) (domain.TechnicalEvent, error) {
+	if r.db == nil {
+		return domain.TechnicalEvent{}, fmt.Errorf("database connection is nil")
+	}
+
+	query := `SELECT ` + technicalEventColumns + `
+		FROM technical_event
+		WHERE id = $1::uuid`
+
+	event, err := scanTechnicalEvent(r.db.QueryRowContext(ctx, query, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.TechnicalEvent{}, fmt.Errorf("technical event %s: %w", id, ports.ErrNotFound)
+	}
+	if err != nil {
+		return domain.TechnicalEvent{}, err
+	}
+
+	return event, nil
 }
 
 type rowScanner interface {
