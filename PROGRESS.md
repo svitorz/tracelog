@@ -272,7 +272,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 
 ## Fase atual (Trilha 2)
 
-**Fase 2 (implementação da API de leitura) concluída** em `feat/read-api`, sem push, incluindo a migration 000004 (índice aprovado pelo autor). Pendente: push/PR pelo autor. A Fase 3 só começa com `feat/read-api` mesclado no `main` e CI verde.
+**Fase 4 (scaffold de `web/` e CI) concluída** em `feat/web-dashboard`, sem push. Próximo: push e PR pelo autor; a Fase 5 (telas) começa depois do merge com CI verde.
 
 ## Checklist (Trilha 2)
 
@@ -280,9 +280,9 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 |------|--------|--------|
 | 0. Orientação e portão | `feat/read-api` | concluída; P0–P4 satisfeitos |
 | 1. Spec 0005 (API de leitura) | `feat/read-api` | concluída; aprovada em 2026-11-23 |
-| 2. Implementação da API de leitura | `feat/read-api` | concluída, com a migration 000004; sem push |
-| 3. Spec 0006 (interface web) | a definir (parte do `main` após o merge da fase 2) | pendente |
-| 4. Scaffold de `web/` e CI | `feat/web-dashboard` | pendente |
+| 2. Implementação da API de leitura | `feat/read-api` | concluída; PR #5 mesclado (`6902f5e`), CI verde no `main` |
+| 3. Spec 0006 (interface web) | `feat/web-dashboard` | concluída; aprovada em 2026-11-23 |
+| 4. Scaffold de `web/` e CI | `feat/web-dashboard` | concluída; sem push |
 | 5. Telas (Eventos, Detalhe, Visão geral) | `feat/web-dashboard` | pendente |
 | 6. Integração e entrega | `docs/dashboard` | pendente |
 | 7. Documentação e release | `docs/dashboard` | pendente |
@@ -292,6 +292,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 1. ~~OK para refatorar `cmd/db.go`.~~ Dado pelo autor; feito em commit separado (`refactor:`).
 2. ~~Índice `(severity, occurred_at DESC, id DESC)`.~~ Aprovado pelo autor; migration 000004.
 3. Dataset com uma aplicação só (spec 0005, questão 2): decidir antes da Fase 6.
+4. ~~Spec 0006, seção 8~~ (aprovada com todas as recomendações): (a) servir (embutido com `go:embed`); (b) caminho (`/ui/`); (c) gráfico (SVG próprio); (d) roteamento e dados (React Router + TanStack Query); (e) DOM dos testes (happy-dom); (f) Node (`24.13.0` exato); (g) lint (ESLint sem Prettier); (h) fuso (UTC); (i) idioma da UI (inglês); (j) URL e paginação (cursor na query, anterior pelo histórico); (k) fixtures compartilhadas (sim, alias `@fixtures`).
 
 ## Log de decisões (Trilha 2)
 
@@ -299,6 +300,16 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 |------|---------|--------|
 | 2026-11-23 | Antecipar "API JSON e UI web" (roadmap item 4) e dashboards (item 6) para antes do núcleo de investigação (item 1) e do SQLite (item 2) | Decisão do autor (portfólio). Custo: a leitura nasce sobre a camada PostgreSQL específica; quando o SQLite vier, as consultas novas também terão de ser reescritas. Mitigação: leitura atrás de ports, SQL só nos adapters |
 | 2026-11-23 | Spec 0005 aprovada com todas as recomendações: `/api/v1` (sem espelhar `POST /events`); keyset `(occurred_at, id)` com cursor opaco não assinado; dias vazios preenchidos no Go com `from`/`to` obrigatórios e teto de 366 dias; lista sem `payload`/`raw_line`/`parse_error`, detalhe completo; `HTTP_HOST` padrão `127.0.0.1` (compose `0.0.0.0`), sem CORS; `limit` 1–200 e `400` estrito com `code`/`field`; `data-range` com 14 dias até o erro mais recente; índice só com medição; três rotas de referência; sem severidade múltipla; cursor reaproveitável entre filtros | Decisão do autor; justificativas e alternativas descartadas na spec 0005 §8 |
+| 2026-11-23 | Spec 0006 aprovada com todas as recomendações: UI embutida com `go:embed` sob `/ui/` (`/` redireciona), build do Vite no módulo Go raiz e `web/go.mod` marcador; gráfico em SVG próprio; React Router + TanStack Query; happy-dom; Node `24.13.0` exato; ESLint sem Prettier; horários em UTC; UI em inglês; filtros e cursor na URL com "anterior" pelo histórico; fixtures de `testdata/api` por alias `@fixtures` | Decisão do autor; justificativas e alternativas descartadas na spec 0006 §8 |
+| 2026-11-23 | React Router em modo declarativo (`<BrowserRouter>`/`<Routes>`), não o data router (`createBrowserRouter`) | Medido: o data router ocupava 92 KB do bundle, o modo declarativo 35,6 KB; total de 110,6 para 93,0 KB gzip. As telas não usam loaders/actions; `useSearchParams`, `Link` e `useNavigate` existem nos dois modos. Detalhe de implementação dentro da dependência aprovada |
+| 2026-11-23 | Versões exatas no `package.json` (sem `^`) | Mesma disciplina do Go e do `.nvmrc`; o `package-lock.json` fixa as transitivas |
+| 2026-11-23 | `vite.config.ts` sem `@types/node` (declaração local de `process.env`) | Evita uma dependência só para tipar uma variável |
+| 2026-11-23 | Proxy do dev por `TRACELOG_API_URL` (padrão `http://127.0.0.1:8080`), não `HTTP_PORT` | O `Makefile` não lê o `.env`; uma URL explícita deixa claro para onde o proxy aponta |
+| 2026-11-23 | Contrato TS × Go testado por chaves (`Record<keyof T, true>` + `satisfies` contra as fixtures) | JSON importado tem literais alargados (`severity: string`), então atribuir a fixture ao tipo não compila; comparar chaves pega campo a mais ou a menos dos dois lados sem gerador de tipos |
+| 2026-11-23 | Regras do ESLint com tipos desligadas só no `eslint.config.js` | O arquivo é JS fora do tsconfig; o *project service* não o enxerga |
+| 2026-11-23 | `web/node_modules/` no `.dockerignore` já na fase 4 (a spec deixava para a fase 6) | Sem isso, o `docker build` local enviaria 186 MB de contexto assim que alguém instalar o front |
+| 2026-11-23 | TypeScript 6.0.3 em vez de 7.0.2; `@testing-library/dom` 10.4.2 acrescentado (spec 0006 §5.4 atualizada) | Decisão do autor. Os peers do registro npm mostraram que o `typescript-eslint` 8.74 exige `typescript <6.1.0` e que o `@testing-library/react` 16 exige `@testing-library/dom ^10`. Descartados: TS 7 sem `typescript-eslint` (sem lint de TSX, perde a regra contra `dangerouslySetInnerHTML`) e `--legacy-peer-deps` |
+| 2026-11-23 | Spec 0006 e fase 4 no mesmo branch `feat/web-dashboard` | Como spec 0005 + fase 2 em `feat/read-api`: a spec é aprovada na conversa, sem PR próprio; o PR leva spec e scaffold juntos |
 | 2026-11-23 | Índice `idx_technical_event_severity_occurred_at` por migration 000004 | Decisão do autor (eu havia recomendado esperar: sem ele, toda consulta de tela já ficava abaixo de 45 ms). Ganho medido na lista filtrada e na contagem da Visão geral; custo ~8 µs por linha e 3,9 MB a cada 80 mil eventos. O índice só de `severity` ficou redundante e não foi removido (pede confirmação) |
 | 2026-11-23 | Novo caso de uso `ListEventsPageUseCase` em vez de mudar `ListTechnicalEventsUseCase` | A CLI não tem teto de `limit` e a spec 0005 exclui mudanças na CLI; os dois compartilham o port. Descartado: um caso de uso com modo "estrito" (flag que muda a validação) |
 | 2026-11-23 | `Limit *int` no input da página | Distingue ausente (padrão 50) de `limit=0` (400) sem o adapter decidir o padrão |
@@ -363,6 +374,40 @@ Outras verificações: integração (13 testes, inclusive 9 eventos com 7 timest
 
 Limitações: uma máquina, cache quente, volume com uma aplicação e um ambiente (filtros por eles não discriminam); o import de hoje levou 68,8 s contra 38,4 s na Fase 0 com o mesmo binário de import e o mesmo volume, o que indica variação da máquina (Docker e disco compartilhados), não regressão: o caminho de escrita não mudou. O diagrama Mermaid do README não foi validado por renderização (sem `mmdc` local).
 
+## Medições (Trilha 2, Fase 3)
+
+| Verificação | Resultado |
+|-------------|-----------|
+| CI no merge do PR #5 (`6902f5e`) | `format, vet, test, build` e `docker build`: success; árvore idêntica a `9cd8458` (head do PR, também verde) |
+| `go vet ./...` num módulo com `web/node_modules/pkg/bad.go` | falha (`expected declaration`): o Go percorre `node_modules` |
+| Mesmo teste com `web/go.mod` mínimo | exit 0; `go list ./...` não lista `web/` |
+| `flatted` (dependência do ESLint via `flat-cache`) no unpkg | publica `golang/pkg/flatted/flatted.go` |
+| `jsdom` 30.x e 31.x no registro npm | `engines.node`: `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0`; Node local: 24.13.0 |
+| `happy-dom` 21.0.4 | `engines.node`: `>=20.0.0` |
+| Recharts 3.11.1 | 11 dependências (inclui `@reduxjs/toolkit`, `react-redux`, `immer`, `victory-vendor`), 8,5 MB publicados |
+
+Método: metadados do registro npm (`/<pacote>/latest`, `unpackedSize`, `engines`, `dependencies`) e listagem do unpkg, sem instalar nada. `unpackedSize` não é tamanho de bundle; o bundle será medido no build (fase 4).
+
+## Medições (Trilha 2, Fase 4)
+
+Node 24.13.0, npm 11.6.2, mesma máquina.
+
+| Verificação | Resultado |
+|-------------|-----------|
+| `npm install` (versões exatas) | 215 pacotes em 48 s; `node_modules` 186 MB (`du -sh`); `npm ls --all`: só `UNMET OPTIONAL` de binários de outras plataformas |
+| `npm ci` (via `make web-install`) | 212 pacotes em 3 s (cache); `found 0 vulnerabilities` |
+| `go vet ./...` e `go test -race ./...` na raiz, com `web/node_modules/flatted/golang/pkg/flatted/flatted.go` presente | ok (critério 6 da spec 0006) |
+| `make lint`, `make test` (com `TRACELOG_TEST_DATABASE_URL`), `make build` | ok, sem mudança |
+| `make web-lint`, `web-typecheck`, `web-test`, `web-build` | ok; 18 testes em 4 arquivos |
+| Regra contra HTML cru | teste automatizado (`src/security.test.ts`, ESLint real) e execução: um `src/__probe__.tsx` com `dangerouslySetInnerHTML` fez `npm run lint` sair com 1 (`no-restricted-syntax`); arquivo apagado em seguida |
+| Bundle de produção (`vite build`) | `index.html` 0,43 KB; CSS 8,66 KB (2,59 KB gzip); JS 294,21 KB (**92,97 KB gzip**) |
+| Bundle com o data router (antes da troca) | JS 351,91 KB (110,54 KB gzip) |
+| Composição do JS (source map decodificado por script, bytes não comprimidos) | data router: react-dom 202,1 KB (58,8%), react-router 92,0 KB (26,8%), query-core 30,5 KB, react 7,9 KB, app 4,5 KB; modo declarativo: react-router 35,6 KB (12,4%) |
+| `docker build` com `web/` no repositório | ok em 21 s; imagem 31,5 MB (igual); UID 10001 |
+| Prova de vida | API real (`examples/logs`, 127.0.0.1:18095) + `vite` com `TRACELOG_API_URL`, aberta no navegador embutido em `http://127.0.0.1:5173/ui/`: "Connected, database ready", aplicação "Local Application", período sugerido 2026-03-01 a 2026-03-14; sem erros no console. API derrubada + recarregar: "Could not reach the TraceLog API." com botão "Try again" |
+
+Limitações: o tamanho por pacote é a parte dos bytes **não comprimidos** atribuída pelo source map (o gzip não é separável por pacote); uma execução por medição. O job `web` do CI só roda de verdade depois do push.
+
 ## Achados fora de escopo (Trilha 2)
 
 - O mux devolve `404 page not found` em `text/plain` para rotas desconhecidas (padrão do `net/http`), não JSON. A API de leitura vai criar o primeiro 404 de verdade; decidir na spec 0005 se rotas desconhecidas também respondem JSON.
@@ -373,8 +418,10 @@ Limitações: uma máquina, cache quente, volume com uma aplicação e um ambien
 - `docs/demo-output.txt` depende da ordem em que o `docker compose run` mistura stdout e stderr: o `Total: N event(s).` do `events list` (stderr) saiu antes da tabela na captura versionada e depois dela na execução da fase 2. Corrigir de vez exige a saída da CLI toda em stdout (pendência do guia §13).
 - Parser de `from`/`to` duplicado entre `cmd/events.go` e `internal/adapters/http/read_handler.go` (mesma regra); unificar num commit `refactor:` próprio.
 - A mensagem do `serve` ("listening on port N") não mostra o `HTTP_HOST`; mantida para não mudar a saída da CLI sem spec.
+- Na Fase 4 havia um stack compose `tracelog` (nome padrão) no ar, não iniciado por mim: `tracelog-api-1` em `127.0.0.1:8080` e `tracelog-postgres-1` em `127.0.0.1:5432`. Um `pkill -f "tracelog serve"` meu tentou atingir o processo dele (UID 10001) e foi recusado pelo sistema; nada foi alterado. Lição: parar só pelo PID que eu iniciei.
+- Em dev, o `StrictMode` monta as telas duas vezes e o TanStack cancela a primeira leva de requisições (`ERR_ABORTED` no navegador); esperado, não acontece no build de produção.
 - `idx_technical_event_severity` (000001) ficou redundante com o índice composto da 000004 (mesma coluna à esquerda). Removê-lo economiza escrita, mas é `DROP INDEX` numa migration nova e pede confirmação (AGENTS.md §12).
 
 ## Próximo passo (Trilha 2)
 
-Autor: push de `feat/read-api`, PR para `main`, CI verde e merge. Em seguida: Fase 3 (spec 0006 da interface web), em branch novo a partir do `main` atualizado.
+Autor: push de `feat/web-dashboard`, PR para `main`, CI verde (inclusive o job `web` novo) e merge. Depois: Fase 5, fatia 1 (Eventos: lista, filtros, paginação, estado na URL), em branch novo a partir do `main` atualizado.

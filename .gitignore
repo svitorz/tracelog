@@ -8,7 +8,7 @@
 *.swo
 *~
 
-# Build artifacts
+# Build artifacts (dist/ cobre também o build do front em internal/adapters/http/webui/dist)
 bin/
 dist/
 *.exe
@@ -29,3 +29,6 @@ Thumbs.db
 *.log
 # Dados de exemplo versionados (gerados por tools/loggen)
 !examples/logs/*.log
+
+# Dependências do front (web/)
+node_modules/
