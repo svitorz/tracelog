@@ -16,6 +16,26 @@ import (
 
 const defaultFindLimit = 100
 
+const technicalEventColumns = `
+	id,
+	external_id,
+	occurred_at,
+	received_at,
+	message,
+	severity,
+	category,
+	payload,
+	trace_id,
+	correlation_id,
+	raw_line,
+	normalization_status,
+	parse_error,
+	ingestion_channel,
+	application_id,
+	source_id,
+	environment_id,
+	created_at`
+
 // PostgresTechnicalEventRepository persists technical events in PostgreSQL.
 type PostgresTechnicalEventRepository struct {
 	db *sql.DB
@@ -25,13 +45,16 @@ func NewPostgresTechnicalEventRepository(db *sql.DB) *PostgresTechnicalEventRepo
 	return &PostgresTechnicalEventRepository{db: db}
 }
 
-func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *domain.TechnicalEvent) error {
+// Save inserts the event. When an event with the same (application_id, external_id)
+// already exists, nothing is inserted, event is overwritten with the stored row and
+// created is false. ON CONFLICT avoids the race of check-then-insert (spec 0001 D9).
+func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *domain.TechnicalEvent) (bool, error) {
 	if event == nil {
-		return fmt.Errorf("technical event is nil")
+		return false, fmt.Errorf("technical event is nil")
 	}
 
 	if r.db == nil {
-		return fmt.Errorf("database connection is nil")
+		return false, fmt.Errorf("database connection is nil")
 	}
 
 	payload := event.Payload
@@ -41,7 +64,7 @@ func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *doma
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal technical event payload: %w", err)
+		return false, fmt.Errorf("failed to marshal technical event payload: %w", err)
 	}
 
 	query := `
@@ -82,6 +105,7 @@ func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *doma
 			$16::uuid,
 			$17::uuid
 		)
+		ON CONFLICT (application_id, external_id) WHERE external_id IS NOT NULL DO NOTHING
 		RETURNING id, received_at, created_at
 	`
 
@@ -90,7 +114,7 @@ func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *doma
 		receivedAt = sql.NullTime{Time: event.ReceivedAt, Valid: true}
 	}
 
-	if err := r.db.QueryRowContext(
+	err = r.db.QueryRowContext(
 		ctx,
 		query,
 		event.ID,
@@ -110,16 +134,30 @@ func (r *PostgresTechnicalEventRepository) Save(ctx context.Context, event *doma
 		event.ApplicationID,
 		event.SourceID,
 		event.EnvironmentID,
-	).Scan(&event.ID, &event.ReceivedAt, &event.CreatedAt); err != nil {
-		if message := friendlyForeignKeyError(err); message != "" {
-			return fmt.Errorf("failed to save technical event: %s", message)
+	).Scan(&event.ID, &event.ReceivedAt, &event.CreatedAt)
+
+	switch {
+	case err == nil:
+		event.Payload = payload
+		return true, nil
+	case errors.Is(err, sql.ErrNoRows):
+		existing, findErr := r.findByExternalID(ctx, event.ApplicationID, event.ExternalID)
+		if findErr != nil {
+			return false, fmt.Errorf("failed to load existing technical event: %w", findErr)
 		}
-
-		return fmt.Errorf("failed to save technical event: %w", err)
+		*event = existing
+		return false, nil
+	default:
+		return false, fmt.Errorf("failed to save technical event: %w", mapSaveError(err))
 	}
+}
 
-	event.Payload = payload
-	return nil
+func (r *PostgresTechnicalEventRepository) findByExternalID(ctx context.Context, applicationID, externalID string) (domain.TechnicalEvent, error) {
+	query := `SELECT ` + technicalEventColumns + `
+		FROM technical_event
+		WHERE application_id = $1::uuid AND external_id = $2`
+
+	return scanTechnicalEvent(r.db.QueryRowContext(ctx, query, applicationID, externalID))
 }
 
 func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, filters ports.TechnicalEventFilters) ([]domain.TechnicalEvent, error) {
@@ -127,26 +165,7 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 		return nil, fmt.Errorf("database connection is nil")
 	}
 
-	query := `
-		SELECT
-			id,
-			external_id,
-			occurred_at,
-			received_at,
-			message,
-			severity,
-			category,
-			payload,
-			trace_id,
-			correlation_id,
-			raw_line,
-			normalization_status,
-			parse_error,
-			ingestion_channel,
-			application_id,
-			source_id,
-			environment_id,
-			created_at
+	query := `SELECT ` + technicalEventColumns + `
 		FROM technical_event
 		WHERE 1=1
 	`
@@ -201,61 +220,10 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 
 	events := make([]domain.TechnicalEvent, 0)
 	for rows.Next() {
-		var (
-			event         domain.TechnicalEvent
-			externalID    sql.NullString
-			severity      string
-			category      string
-			ingestion     string
-			payloadRaw    []byte
-			traceID       sql.NullString
-			correlationID sql.NullString
-			rawLine       sql.NullString
-			normalization string
-			parseError    sql.NullString
-		)
-
-		if err := rows.Scan(
-			&event.ID,
-			&externalID,
-			&event.OccurredAt,
-			&event.ReceivedAt,
-			&event.Message,
-			&severity,
-			&category,
-			&payloadRaw,
-			&traceID,
-			&correlationID,
-			&rawLine,
-			&normalization,
-			&parseError,
-			&ingestion,
-			&event.ApplicationID,
-			&event.SourceID,
-			&event.EnvironmentID,
-			&event.CreatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan technical event: %w", err)
+		event, err := scanTechnicalEvent(rows)
+		if err != nil {
+			return nil, err
 		}
-
-		event.ExternalID = externalID.String
-		event.Severity = domain.Severity(severity)
-		event.Category = domain.EventCategory(category)
-		event.IngestionChannel = domain.IngestionChannel(ingestion)
-		event.TraceID = traceID.String
-		event.CorrelationID = correlationID.String
-		event.RawLine = rawLine.String
-		event.NormalizationStatus = domain.NormalizationStatus(normalization)
-		event.ParseError = parseError.String
-
-		if len(payloadRaw) == 0 {
-			event.Payload = map[string]any{}
-		} else {
-			if err := json.Unmarshal(payloadRaw, &event.Payload); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal technical event payload: %w", err)
-			}
-		}
-
 		events = append(events, event)
 	}
 
@@ -266,7 +234,79 @@ func (r *PostgresTechnicalEventRepository) FindByFilters(ctx context.Context, fi
 	return events, nil
 }
 
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanTechnicalEvent reads one row selected with technicalEventColumns.
+func scanTechnicalEvent(row rowScanner) (domain.TechnicalEvent, error) {
+	var (
+		event         domain.TechnicalEvent
+		externalID    sql.NullString
+		severity      string
+		category      string
+		ingestion     string
+		payloadRaw    []byte
+		traceID       sql.NullString
+		correlationID sql.NullString
+		rawLine       sql.NullString
+		normalization string
+		parseError    sql.NullString
+	)
+
+	if err := row.Scan(
+		&event.ID,
+		&externalID,
+		&event.OccurredAt,
+		&event.ReceivedAt,
+		&event.Message,
+		&severity,
+		&category,
+		&payloadRaw,
+		&traceID,
+		&correlationID,
+		&rawLine,
+		&normalization,
+		&parseError,
+		&ingestion,
+		&event.ApplicationID,
+		&event.SourceID,
+		&event.EnvironmentID,
+		&event.CreatedAt,
+	); err != nil {
+		return domain.TechnicalEvent{}, fmt.Errorf("failed to scan technical event: %w", err)
+	}
+
+	event.ExternalID = externalID.String
+	event.Severity = domain.Severity(severity)
+	event.Category = domain.EventCategory(category)
+	event.IngestionChannel = domain.IngestionChannel(ingestion)
+	event.TraceID = traceID.String
+	event.CorrelationID = correlationID.String
+	event.RawLine = rawLine.String
+	event.NormalizationStatus = domain.NormalizationStatus(normalization)
+	event.ParseError = parseError.String
+
+	event.Payload = map[string]any{}
+	if len(payloadRaw) > 0 {
+		if err := json.Unmarshal(payloadRaw, &event.Payload); err != nil {
+			return domain.TechnicalEvent{}, fmt.Errorf("failed to unmarshal technical event payload: %w", err)
+		}
+	}
+
+	return event, nil
+}
+
 var _ ports.TechnicalEventRepository = (*PostgresTechnicalEventRepository)(nil)
+
+// mapSaveError translates PostgreSQL errors the core layer must react to into port errors.
+func mapSaveError(err error) error {
+	if message := friendlyForeignKeyError(err); message != "" {
+		return fmt.Errorf("%w: %s", ports.ErrReferenceNotFound, message)
+	}
+
+	return err
+}
 
 func friendlyForeignKeyError(err error) string {
 	var pgErr *pgconn.PgError

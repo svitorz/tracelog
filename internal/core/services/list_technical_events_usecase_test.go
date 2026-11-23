@@ -12,8 +12,8 @@ type stubListTechnicalEventRepository struct {
 	filters ports.TechnicalEventFilters
 }
 
-func (r *stubListTechnicalEventRepository) Save(context.Context, *domain.TechnicalEvent) error {
-	return nil
+func (r *stubListTechnicalEventRepository) Save(context.Context, *domain.TechnicalEvent) (bool, error) {
+	return true, nil
 }
 
 func (r *stubListTechnicalEventRepository) FindByFilters(_ context.Context, filters ports.TechnicalEventFilters) ([]domain.TechnicalEvent, error) {

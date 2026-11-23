@@ -10,15 +10,16 @@ import (
 func TestLoadUsesDefaultsAndRequiredDatabaseSettings(t *testing.T) {
 	withTempWorkingDir(t)
 	withEnv(t, map[string]string{
-		"APP_NAME":    "",
-		"APP_ENV":     "",
-		"HTTP_PORT":   "",
-		"DB_HOST":     "",
-		"DB_PORT":     "",
-		"DB_NAME":     "tracelog",
-		"DB_USER":     "postgres",
-		"DB_PASSWORD": "postgres",
-		"DB_SSLMODE":  "",
+		"APP_NAME":            "",
+		"APP_ENV":             "",
+		"HTTP_PORT":           "",
+		"DB_HOST":             "",
+		"DB_PORT":             "",
+		"DB_NAME":             "tracelog",
+		"HTTP_MAX_BODY_BYTES": "",
+		"DB_USER":             "postgres",
+		"DB_PASSWORD":         "postgres",
+		"DB_SSLMODE":          "",
 	})
 
 	cfg, err := Load()
@@ -40,6 +41,9 @@ func TestLoadUsesDefaultsAndRequiredDatabaseSettings(t *testing.T) {
 	}
 	if cfg.DB.Port != defaultDBPort {
 		t.Fatalf("DB.Port = %d, want %d", cfg.DB.Port, defaultDBPort)
+	}
+	if cfg.HTTP.MaxBodyBytes != defaultHTTPMaxBodyBytes {
+		t.Fatalf("HTTP.MaxBodyBytes = %d, want %d", cfg.HTTP.MaxBodyBytes, defaultHTTPMaxBodyBytes)
 	}
 	if cfg.DB.SSLMode != defaultDBSSLMode {
 		t.Fatalf("DB.SSLMode = %q, want %q", cfg.DB.SSLMode, defaultDBSSLMode)
@@ -99,6 +103,25 @@ func TestLoadReadsDotEnvWithoutOverridingExistingEnvironment(t *testing.T) {
 	}
 	if cfg.DB.Name != "from-env" {
 		t.Fatalf("DB.Name = %q, want %q", cfg.DB.Name, "from-env")
+	}
+}
+
+func TestLoadRejectsNonPositiveMaxBodyBytes(t *testing.T) {
+	for _, value := range []string{"0", "-1"} {
+		t.Run(value, func(t *testing.T) {
+			withTempWorkingDir(t)
+			withEnv(t, map[string]string{
+				"HTTP_MAX_BODY_BYTES": value,
+				"DB_NAME":             "tracelog",
+				"DB_USER":             "postgres",
+				"DB_PASSWORD":         "postgres",
+			})
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), "HTTP_MAX_BODY_BYTES") {
+				t.Fatalf("Load() error = %v, want HTTP_MAX_BODY_BYTES validation error", err)
+			}
+		})
 	}
 }
 

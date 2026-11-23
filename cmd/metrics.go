@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"text/tabwriter"
 
@@ -28,15 +27,15 @@ var metricsCmd = &cobra.Command{
 
 var metricsErrorsCmd = &cobra.Command{
 	Use:   "errors",
-	Short: "Show error frequency by day",
-	Long:  "Display the frequency of errors (severity=error) grouped by day. Useful for identifying error patterns over time.",
+	Short: "Show error and fatal frequency by day",
+	Long:  "Display the number of error and fatal events grouped by UTC day. Days without error or fatal events are omitted.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		occurredFrom, err := parsePeriodValue(metricsErrorsFrom)
 		if err != nil {
 			return fmt.Errorf("invalid --from value: %w", err)
 		}
 
-		occurredTo, err := parsePeriodValue(metricsErrorsTo)
+		occurredTo, err := parsePeriodEnd(metricsErrorsTo)
 		if err != nil {
 			return fmt.Errorf("invalid --to value: %w", err)
 		}
@@ -73,7 +72,7 @@ func init() {
 	metricsErrorsCmd.Flags().StringVar(&metricsErrorsApplicationID, "application-id", "", "Filter by application UUID")
 	metricsErrorsCmd.Flags().StringVar(&metricsErrorsEnvironmentID, "environment-id", "", "Filter by environment UUID")
 	metricsErrorsCmd.Flags().StringVar(&metricsErrorsFrom, "from", "", "Period start (RFC3339 or YYYY-MM-DD)")
-	metricsErrorsCmd.Flags().StringVar(&metricsErrorsTo, "to", "", "Period end (RFC3339 or YYYY-MM-DD)")
+	metricsErrorsCmd.Flags().StringVar(&metricsErrorsTo, "to", "", "Period end (RFC3339, or YYYY-MM-DD to include the whole day)")
 
 	metricsErrorsCmd.Example = strings.Join([]string{
 		"  # Show error frequency for all applications",
@@ -91,29 +90,29 @@ func init() {
 }
 
 func printErrorFrequencyTable(cmd *cobra.Command, frequencies []domain.ErrorFrequency) {
+	out := cmd.OutOrStdout()
 	if len(frequencies) == 0 {
-		cmd.Println("No errors found for the provided filters.")
+		_, _ = fmt.Fprintln(out, "No errors found for the provided filters.")
 		return
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "DATE\tERROR_COUNT")
-	_, _ = fmt.Fprintln(w, "----\t-----------")
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "DATE\tERRORS\tFATAL\tTOTAL")
+	_, _ = fmt.Fprintln(w, "----\t------\t-----\t-----")
 
-	totalErrors := int64(0)
+	var totalErrors, totalFatal int64
 	for _, freq := range frequencies {
-		_, _ = fmt.Fprintf(w, "%s\t%d\n", freq.Date.Format("2006-01-02"), freq.Count)
-		totalErrors += freq.Count
+		_, _ = fmt.Fprintf(w, "%s\t%d\t%d\t%d\n", freq.Date.Format("2006-01-02"), freq.Errors, freq.Fatal, freq.Total())
+		totalErrors += freq.Errors
+		totalFatal += freq.Fatal
 	}
 
 	_ = w.Flush()
 
-	cmd.Printf("\nSummary:\n")
-	cmd.Printf("  Total days: %d\n", len(frequencies))
-	cmd.Printf("  Total errors: %d\n", totalErrors)
-
-	if len(frequencies) > 0 {
-		avgErrors := float64(totalErrors) / float64(len(frequencies))
-		cmd.Printf("  Average errors/day: %.1f\n", avgErrors)
-	}
+	total := totalErrors + totalFatal
+	_, _ = fmt.Fprintf(out, "\nSummary:\n")
+	_, _ = fmt.Fprintf(out, "  Days with errors: %d\n", len(frequencies))
+	_, _ = fmt.Fprintf(out, "  Errors: %d\n", totalErrors)
+	_, _ = fmt.Fprintf(out, "  Fatal: %d\n", totalFatal)
+	_, _ = fmt.Fprintf(out, "  Average (error+fatal) per day with errors: %.1f\n", float64(total)/float64(len(frequencies)))
 }

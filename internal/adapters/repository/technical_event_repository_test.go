@@ -1,7 +1,10 @@
 package repository
 
 import (
+	"errors"
 	"testing"
+
+	"svitorz/tracelog/internal/core/ports"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -36,5 +39,17 @@ func TestFriendlyForeignKeyError(t *testing.T) {
 				t.Fatalf("friendlyForeignKeyError() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMapSaveErrorWrapsForeignKeyViolation(t *testing.T) {
+	err := mapSaveError(&pgconn.PgError{Code: "23503", ConstraintName: "fk_technical_event_source"})
+	if !errors.Is(err, ports.ErrReferenceNotFound) {
+		t.Fatalf("mapSaveError() = %v, want ports.ErrReferenceNotFound", err)
+	}
+
+	other := &pgconn.PgError{Code: "57P01"}
+	if got := mapSaveError(other); errors.Is(got, ports.ErrReferenceNotFound) {
+		t.Fatalf("mapSaveError(%s) = %v, want it unchanged", other.Code, got)
 	}
 }

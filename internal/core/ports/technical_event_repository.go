@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"svitorz/tracelog/internal/core/domain"
@@ -17,8 +18,15 @@ type TechnicalEventFilters struct {
 	Limit         int
 }
 
+// ErrReferenceNotFound reports that application_id, source_id or environment_id
+// does not reference an existing row. Implementations wrap it with the offending field.
+var ErrReferenceNotFound = errors.New("referenced entity does not exist")
+
 // TechnicalEventRepository defines persistence operations for technical events.
 type TechnicalEventRepository interface {
-	Save(ctx context.Context, event *domain.TechnicalEvent) error
+	// Save persists event and reports whether a new row was created. If an event with the
+	// same (ApplicationID, ExternalID) already exists, event is replaced by the stored one
+	// and created is false. Events without ExternalID are never deduplicated.
+	Save(ctx context.Context, event *domain.TechnicalEvent) (created bool, err error)
 	FindByFilters(ctx context.Context, filters TechnicalEventFilters) ([]domain.TechnicalEvent, error)
 }

@@ -3,33 +3,52 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"log/slog"
+	"mime"
 	"net/http"
+	"strings"
+	"time"
 
 	"svitorz/tracelog/internal/core/domain"
 	"svitorz/tracelog/internal/core/services"
 )
 
+// requestTimeout limits how long a single event registration may take (spec 0002, seção 4.1).
+const requestTimeout = 10 * time.Second
+
 // EventHandler handles HTTP operations for technical events.
 type EventHandler struct {
 	registerUseCase *services.RegisterTechnicalEventUseCase
+	maxBodyBytes    int64
+	logger          *slog.Logger
 }
 
-func NewEventHandler(registerUseCase *services.RegisterTechnicalEventUseCase) *EventHandler {
+func NewEventHandler(registerUseCase *services.RegisterTechnicalEventUseCase, maxBodyBytes int64, logger *slog.Logger) *EventHandler {
 	return &EventHandler{
 		registerUseCase: registerUseCase,
+		maxBodyBytes:    maxBodyBytes,
+		logger:          logger,
 	}
 }
 
+// HandleRegisterEvent serves POST /events; the method is checked by the router.
 func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	if contentType := r.Header.Get("Content-Type"); contentType != "" && !isJSONMediaType(contentType) {
+		respondError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, h.maxBodyBytes))
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to read request body")
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			respondError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("request body exceeds %d bytes", tooLarge.Limit))
+			return
+		}
+		respondError(w, http.StatusBadRequest, "failed to read request body")
 		return
 	}
 
@@ -57,20 +76,47 @@ func (h *EventHandler) HandleRegisterEvent(w http.ResponseWriter, r *http.Reques
 		DecodeError:      decodeError,
 	}
 
-	event, err := h.registerUseCase.Execute(context.Background(), input)
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+
+	result, err := h.registerUseCase.Execute(ctx, input)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		// The error may carry SQL and constraint details: log it, never send it to the client.
+		h.logger.ErrorContext(r.Context(), "failed to register event",
+			"external_id", req.ExternalID,
+			"error", err,
+		)
+		respondError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
+	event := result.Event
 	response := RegisterEventResponse{
 		ID:         event.ID,
 		ExternalID: event.ExternalID,
 		ReceivedAt: event.ReceivedAt,
 		CreatedAt:  event.CreatedAt,
+		Duplicate:  result.Duplicate,
 	}
 
-	respondJSON(w, http.StatusCreated, response)
+	// A resend of an event already stored is a success, not a conflict (spec 0001 D2).
+	status := http.StatusCreated
+	if result.Duplicate {
+		status = http.StatusOK
+	}
+
+	respondJSON(w, status, response)
+}
+
+// isJSONMediaType accepts application/json and structured syntax suffixes such as
+// application/vnd.api+json. A missing Content-Type is handled by the caller.
+func isJSONMediaType(value string) bool {
+	mediaType, _, err := mime.ParseMediaType(value)
+	if err != nil {
+		return false
+	}
+
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
 }
 
 func respondJSON(w http.ResponseWriter, status int, data any) {

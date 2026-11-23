@@ -24,6 +24,8 @@ type RegisterEventResponse struct {
 	ExternalID string    `json:"external_id"`
 	ReceivedAt time.Time `json:"received_at"`
 	CreatedAt  time.Time `json:"created_at"`
+	// Duplicate is true when the event already existed and nothing was stored.
+	Duplicate bool `json:"duplicate"`
 }
 
 // ErrorResponse is the standard HTTP error response.

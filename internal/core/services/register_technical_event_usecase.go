@@ -2,11 +2,13 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"svitorz/tracelog/internal/core/domain"
 	"svitorz/tracelog/internal/core/ports"
@@ -32,6 +34,14 @@ type RegisterTechnicalEventInput struct {
 	DecodeError         string
 }
 
+// RegisterTechnicalEventResult is the outcome of a registration.
+type RegisterTechnicalEventResult struct {
+	Event *domain.TechnicalEvent
+	// Duplicate is true when an event with the same (application_id, external_id)
+	// already existed; Event is then the stored one and nothing was written.
+	Duplicate bool
+}
+
 // RegisterTechnicalEventUseCase validates, enriches and persists a technical event.
 type RegisterTechnicalEventUseCase struct {
 	repo      ports.TechnicalEventRepository
@@ -52,7 +62,7 @@ func NewRegisterTechnicalEventUseCase(repo ports.TechnicalEventRepository, setup
 	}
 }
 
-func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input RegisterTechnicalEventInput) (*domain.TechnicalEvent, error) {
+func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input RegisterTechnicalEventInput) (*RegisterTechnicalEventResult, error) {
 	if uc == nil || uc.repo == nil {
 		return nil, fmt.Errorf("technical event repository is required")
 	}
@@ -89,19 +99,23 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 	applicationID, sourceID, environmentID, idNotes := normalizeReferenceIDs(input, defaults)
 	notes = append(notes, idNotes...)
 
+	externalID := truncateField(input.ExternalID, "external_id", maxExternalIDLength, &notes)
+	traceID := truncateField(input.TraceID, "trace_id", maxTraceIDLength, &notes)
+	correlationID := truncateField(input.CorrelationID, "correlation_id", maxCorrelationIDLength, &notes)
+
 	enrichPayload(payload, input.RawRequestBody, input.OccurredAt, input.DecodeError, notes)
-	severity := deriveSeverity(message, category, payload)
+	severity := deriveSeverity(message, category, payload, input.IngestionChannel)
 
 	event := &domain.TechnicalEvent{
-		ExternalID:          strings.TrimSpace(input.ExternalID),
+		ExternalID:          externalID,
 		OccurredAt:          occurredAt,
 		ReceivedAt:          receivedAt,
 		Message:             message,
 		Severity:            severity,
 		Category:            category,
 		Payload:             payload,
-		TraceID:             strings.TrimSpace(input.TraceID),
-		CorrelationID:       strings.TrimSpace(input.CorrelationID),
+		TraceID:             traceID,
+		CorrelationID:       correlationID,
 		RawLine:             strings.TrimSpace(input.RawLine),
 		NormalizationStatus: normalizationStatus,
 		ParseError:          strings.TrimSpace(input.ParseError),
@@ -111,28 +125,45 @@ func (uc *RegisterTechnicalEventUseCase) Execute(ctx context.Context, input Regi
 		EnvironmentID:       environmentID,
 	}
 
-	if err := uc.repo.Save(ctx, event); err != nil {
-		if shouldRetryWithFallback(err) {
-			recovered, recoveryErr := uc.loadFallbackSetup(ctx)
-			if recoveryErr == nil {
-				retryNotes := applyFallbackSetup(event, recovered)
-				if len(retryNotes) > 0 {
-					notes = append(notes, retryNotes...)
-					enrichPayload(event.Payload, input.RawRequestBody, input.OccurredAt, input.DecodeError, notes)
-				}
-
-				if retryErr := uc.repo.Save(ctx, event); retryErr == nil {
-					return event, nil
-				} else {
-					err = retryErr
-				}
+	created, err := uc.repo.Save(ctx, event)
+	if err != nil && shouldRetryWithFallback(err) {
+		recovered, recoveryErr := uc.loadFallbackSetup(ctx)
+		if recoveryErr == nil {
+			retryNotes := applyFallbackSetup(event, recovered)
+			if len(retryNotes) > 0 {
+				notes = append(notes, retryNotes...)
+				enrichPayload(event.Payload, input.RawRequestBody, input.OccurredAt, input.DecodeError, notes)
 			}
-		}
 
+			created, err = uc.repo.Save(ctx, event)
+		}
+	}
+	if err != nil {
 		return nil, fmt.Errorf("failed to register technical event: %w", err)
 	}
 
-	return event, nil
+	return &RegisterTechnicalEventResult{Event: event, Duplicate: !created}, nil
+}
+
+// Column sizes of technical_event (migrations/000001). Longer values are truncated
+// instead of rejected (spec 0002, seção 4.5).
+const (
+	maxExternalIDLength    = 255
+	maxTraceIDLength       = 128
+	maxCorrelationIDLength = 128
+)
+
+// truncateField trims value and cuts it to max characters (runes, as VARCHAR counts),
+// recording a normalization warning when it had to cut.
+func truncateField(value, field string, max int, notes *[]string) string {
+	value = strings.TrimSpace(value)
+	runes := []rune(value)
+	if len(runes) <= max {
+		return value
+	}
+
+	*notes = append(*notes, fmt.Sprintf("%s truncated from %d to %d characters", field, len(runes), max))
+	return string(runes[:max])
 }
 
 func validateRegisterTechnicalEventInput(input RegisterTechnicalEventInput) error {
@@ -261,11 +292,13 @@ func enrichPayload(payload map[string]any, rawBody string, rawOccurredAt string,
 		}
 	}
 
-	if trimmed := strings.TrimSpace(rawBody); trimmed != "" {
-		ingestion["raw_request_body"] = trimmed
-	}
+	// The raw body is kept only when it could not be decoded: otherwise its content is
+	// already in the event columns and payload, and copying it doubles the storage.
 	if trimmed := strings.TrimSpace(decodeError); trimmed != "" {
 		ingestion["decode_error"] = trimmed
+		if rawTrimmed := strings.TrimSpace(rawBody); rawTrimmed != "" {
+			ingestion["raw_request_body"] = rawTrimmed
+		}
 	}
 	if trimmed := strings.TrimSpace(rawOccurredAt); trimmed != "" {
 		ingestion["original_occurred_at"] = trimmed
@@ -380,45 +413,84 @@ func applyFallbackSetup(event *domain.TechnicalEvent, defaults *ports.BasicSyste
 	return notes
 }
 
-var uuidLikePattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+// Any 8-4-4-4-12 hex UUID, as PostgreSQL's uuid type accepts; restricting the version
+// sent v6/v7/v8 IDs silently to the fallback (spec 0002, seção 4.5).
+var uuidLikePattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func isUUIDLike(value string) bool {
 	return uuidLikePattern.MatchString(strings.TrimSpace(value))
 }
 
 func shouldRetryWithFallback(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	message := err.Error()
-	return strings.Contains(message, "application_id does not reference an existing application") ||
-		strings.Contains(message, "source_id does not reference an existing source") ||
-		strings.Contains(message, "environment_id does not reference an existing environment")
+	return errors.Is(err, ports.ErrReferenceNotFound)
 }
 
-func deriveSeverity(message string, category domain.EventCategory, payload map[string]any) domain.Severity {
+// deriveSeverity decides the severity on the server. payload.level is trusted only
+// outside HTTP (e.g. the level column of an imported log line): an HTTP client must not
+// set the severity directly (AGENTS.md, seção 4; spec 0002, seção 4.4).
+func deriveSeverity(message string, category domain.EventCategory, payload map[string]any, channel domain.IngestionChannel) domain.Severity {
 	content := strings.ToLower(strings.TrimSpace(message))
-	if level, ok := extractSeverityFromPayload(payload); ok {
-		return level
+	if channel != domain.IngestionHTTP {
+		if level, ok := extractSeverityFromPayload(payload); ok {
+			return level
+		}
 	}
 
-	if containsAny(content, "panic", "fatal", "unrecoverable", "crash") || payloadHasSignal(payload, "panic", "fatal", "stack_trace") {
+	words := messageWords(content)
+
+	if hasAnyWord(words, fatalWords...) || payloadHasSignal(payload, "panic", "fatal", "stack_trace") {
 		return domain.SeverityFatal
 	}
 
-	if containsAny(content, "error", "failed", "failure", "timeout", "exception", "unauthorized", "denied") ||
+	if hasAnyWord(words, errorWords...) || camelCaseErrorType.MatchString(message) ||
 		payloadHasSignal(payload, "error", "errors", "exception", "exception_message") {
 		return domain.SeverityError
 	}
 
 	if category == domain.CategorySecurity ||
-		containsAny(content, "warn", "warning", "retry", "deprecated", "slow", "fallback") ||
+		hasAnyWord(words, warnWords...) ||
 		payloadHasSignal(payload, "warning", "warnings", "retry_count") {
 		return domain.SeverityWarn
 	}
 
 	return domain.SeverityInfo
+}
+
+// Keywords matched as whole words (spec 0002, seção 4.4). The inflections keep what the
+// old substring search caught on purpose ("crashed", "timeouts") without matching
+// unrelated words that merely contain a keyword ("terror", "crashpad").
+var (
+	fatalWords = []string{"panic", "panics", "panicked", "panicking", "fatal", "fatally", "unrecoverable", "crash", "crashes", "crashed", "crashing"}
+	errorWords = []string{"error", "errors", "failed", "failure", "failures", "timeout", "timeouts", "exception", "exceptions", "unauthorized", "denied"}
+	warnWords  = []string{"warn", "warns", "warned", "warning", "warnings", "retry", "retrying", "deprecated", "slow", "slowly", "slower", "fallback", "fallbacks"}
+)
+
+// camelCaseErrorType matches type names such as TypeError or IOException. It is
+// case-sensitive so that "terror" does not match.
+var camelCaseErrorType = regexp.MustCompile(`\b[A-Z][A-Za-z0-9]*(Error|Exception)\b`)
+
+// messageWords splits a lowercased message into words (runs of letters and digits).
+func messageWords(content string) map[string]struct{} {
+	fields := strings.FieldsFunc(content, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+
+	words := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		words[field] = struct{}{}
+	}
+
+	return words
+}
+
+func hasAnyWord(words map[string]struct{}, needles ...string) bool {
+	for _, needle := range needles {
+		if _, ok := words[needle]; ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func extractSeverityFromPayload(payload map[string]any) (domain.Severity, bool) {

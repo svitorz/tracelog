@@ -3,8 +3,11 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"svitorz/tracelog/internal/core/domain"
 	"svitorz/tracelog/internal/core/ports"
@@ -15,23 +18,24 @@ type stubTechnicalEventRepository struct {
 	err        error
 	saveErrors []error
 	saves      int
+	duplicate  bool
 }
 
-func (r *stubTechnicalEventRepository) Save(_ context.Context, event *domain.TechnicalEvent) error {
+func (r *stubTechnicalEventRepository) Save(_ context.Context, event *domain.TechnicalEvent) (bool, error) {
 	r.saves++
 	r.saved = event
 	if len(r.saveErrors) > 0 {
 		err := r.saveErrors[0]
 		r.saveErrors = r.saveErrors[1:]
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 	if r.err != nil {
-		return r.err
+		return false, r.err
 	}
 	event.ID = "event-1"
-	return nil
+	return !r.duplicate, nil
 }
 
 func (r *stubTechnicalEventRepository) FindByFilters(context.Context, ports.TechnicalEventFilters) ([]domain.TechnicalEvent, error) {
@@ -42,7 +46,7 @@ func TestRegisterTechnicalEventDerivesErrorSeverityFromMessage(t *testing.T) {
 	repo := &stubTechnicalEventRepository{}
 	uc := NewRegisterTechnicalEventUseCase(repo)
 
-	event, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+	result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
 		ExternalID:       "ext-1",
 		OccurredAt:       "2026-03-09T12:00:00Z",
 		Message:          "Database timeout",
@@ -54,6 +58,7 @@ func TestRegisterTechnicalEventDerivesErrorSeverityFromMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() unexpected error = %v", err)
 	}
+	event := result.Event
 
 	if event.Severity != domain.SeverityError {
 		t.Fatalf("event severity = %q, want %q", event.Severity, domain.SeverityError)
@@ -68,7 +73,7 @@ func TestRegisterTechnicalEventDerivesFatalSeverityFromPayloadSignal(t *testing.
 	repo := &stubTechnicalEventRepository{}
 	uc := NewRegisterTechnicalEventUseCase(repo)
 
-	event, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+	result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
 		ExternalID:       "ext-1",
 		OccurredAt:       "2026-03-09T12:00:00Z",
 		Message:          "worker stopped unexpectedly",
@@ -81,6 +86,7 @@ func TestRegisterTechnicalEventDerivesFatalSeverityFromPayloadSignal(t *testing.
 	if err != nil {
 		t.Fatalf("Execute() unexpected error = %v", err)
 	}
+	event := result.Event
 
 	if event.Severity != domain.SeverityFatal {
 		t.Fatalf("event severity = %q, want %q", event.Severity, domain.SeverityFatal)
@@ -91,7 +97,7 @@ func TestRegisterTechnicalEventDefaultsSeverityToInfo(t *testing.T) {
 	repo := &stubTechnicalEventRepository{}
 	uc := NewRegisterTechnicalEventUseCase(repo)
 
-	event, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+	result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
 		ExternalID:       "ext-1",
 		OccurredAt:       "2026-03-09T12:00:00Z",
 		Message:          "user profile loaded",
@@ -103,6 +109,7 @@ func TestRegisterTechnicalEventDefaultsSeverityToInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() unexpected error = %v", err)
 	}
+	event := result.Event
 
 	if event.Severity != domain.SeverityInfo {
 		t.Fatalf("event severity = %q, want %q", event.Severity, domain.SeverityInfo)
@@ -122,7 +129,7 @@ func TestRegisterTechnicalEventUsesFallbacksAndStoresNormalizationWarnings(t *te
 	now := time.Date(2026, 3, 11, 10, 0, 0, 0, time.UTC)
 	uc.now = func() time.Time { return now }
 
-	event, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+	result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
 		OccurredAt:       "not-a-date",
 		Category:         "invalid-category",
 		IngestionChannel: domain.IngestionHTTP,
@@ -131,6 +138,7 @@ func TestRegisterTechnicalEventUsesFallbacksAndStoresNormalizationWarnings(t *te
 	if err != nil {
 		t.Fatalf("Execute() unexpected error = %v", err)
 	}
+	event := result.Event
 
 	if event.OccurredAt != now {
 		t.Fatalf("event.OccurredAt = %v, want %v", event.OccurredAt, now)
@@ -159,7 +167,7 @@ func TestRegisterTechnicalEventUsesFallbacksAndStoresNormalizationWarnings(t *te
 func TestRegisterTechnicalEventRetriesWithFallbackSetupAfterForeignKeyFailure(t *testing.T) {
 	repo := &stubTechnicalEventRepository{
 		saveErrors: []error{
-			errors.New("failed to save technical event: application_id does not reference an existing application"),
+			fmt.Errorf("failed to save technical event: %w: application_id", ports.ErrReferenceNotFound),
 			nil,
 		},
 	}
@@ -172,7 +180,7 @@ func TestRegisterTechnicalEventRetriesWithFallbackSetupAfterForeignKeyFailure(t 
 	}
 	uc := NewRegisterTechnicalEventUseCase(repo, setupRepo)
 
-	event, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+	result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
 		OccurredAt:       "2026-03-09T12:00:00Z",
 		Message:          "foreign key mismatch",
 		IngestionChannel: domain.IngestionHTTP,
@@ -183,6 +191,7 @@ func TestRegisterTechnicalEventRetriesWithFallbackSetupAfterForeignKeyFailure(t 
 	if err != nil {
 		t.Fatalf("Execute() unexpected error = %v", err)
 	}
+	event := result.Event
 
 	if repo.saves != 2 {
 		t.Fatalf("repo.Save calls = %d, want 2", repo.saves)
@@ -198,5 +207,173 @@ func TestRegisterTechnicalEventRetriesWithFallbackSetupAfterForeignKeyFailure(t 
 	warnings, ok := meta["normalization_warnings"].([]string)
 	if !ok || len(warnings) == 0 {
 		t.Fatalf("retry warnings missing: %#v", meta["normalization_warnings"])
+	}
+}
+
+func TestRegisterTechnicalEventDoesNotRetryOnOtherErrors(t *testing.T) {
+	repo := &stubTechnicalEventRepository{err: errors.New("connection refused")}
+	uc := NewRegisterTechnicalEventUseCase(repo, &stubSystemSetupRepository{saved: basicSetupFixture()})
+
+	_, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+		Message:          "x",
+		IngestionChannel: domain.IngestionHTTP,
+		ApplicationID:    "550e8400-e29b-41d4-a716-446655440000",
+		SourceID:         "660e8400-e29b-41d4-a716-446655440001",
+		EnvironmentID:    "770e8400-e29b-41d4-a716-446655440002",
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want the repository error")
+	}
+	if repo.saves != 1 {
+		t.Fatalf("repo.Save calls = %d, want 1 (no fallback retry)", repo.saves)
+	}
+}
+
+func TestRegisterTechnicalEventReportsDuplicate(t *testing.T) {
+	repo := &stubTechnicalEventRepository{duplicate: true}
+	uc := NewRegisterTechnicalEventUseCase(repo)
+
+	result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+		ExternalID:       "ext-1",
+		Message:          "x",
+		IngestionChannel: domain.IngestionHTTP,
+		ApplicationID:    "550e8400-e29b-41d4-a716-446655440000",
+		SourceID:         "660e8400-e29b-41d4-a716-446655440001",
+		EnvironmentID:    "770e8400-e29b-41d4-a716-446655440002",
+	})
+	if err != nil {
+		t.Fatalf("Execute() unexpected error = %v", err)
+	}
+	if !result.Duplicate {
+		t.Fatal("Duplicate = false, want true when the repository did not create a row")
+	}
+}
+
+func TestRegisterTechnicalEventTruncatesOversizedIdentifiers(t *testing.T) {
+	repo := &stubTechnicalEventRepository{}
+	uc := NewRegisterTechnicalEventUseCase(repo)
+
+	result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+		ExternalID:       strings.Repeat("é", 300),
+		TraceID:          strings.Repeat("t", 129),
+		CorrelationID:    strings.Repeat("c", 128),
+		Message:          "x",
+		IngestionChannel: domain.IngestionHTTP,
+		ApplicationID:    "550e8400-e29b-41d4-a716-446655440000",
+		SourceID:         "660e8400-e29b-41d4-a716-446655440001",
+		EnvironmentID:    "770e8400-e29b-41d4-a716-446655440002",
+	})
+	if err != nil {
+		t.Fatalf("Execute() unexpected error = %v", err)
+	}
+
+	event := result.Event
+	if got := utf8.RuneCountInString(event.ExternalID); got != 255 {
+		t.Fatalf("ExternalID length = %d characters, want 255", got)
+	}
+	if !utf8.ValidString(event.ExternalID) {
+		t.Fatal("ExternalID was cut in the middle of a UTF-8 sequence")
+	}
+	if len(event.TraceID) != 128 {
+		t.Fatalf("TraceID length = %d, want 128", len(event.TraceID))
+	}
+	if len(event.CorrelationID) != 128 {
+		t.Fatalf("CorrelationID length = %d, want 128 (at the limit, untouched)", len(event.CorrelationID))
+	}
+
+	meta, _ := event.Payload["_ingestion"].(map[string]any)
+	warnings, _ := meta["normalization_warnings"].([]string)
+	joined := strings.Join(warnings, "; ")
+	for _, want := range []string{"external_id truncated from 300 to 255", "trace_id truncated from 129 to 128"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("warnings = %q, want %q", joined, want)
+		}
+	}
+	if strings.Contains(joined, "correlation_id truncated") {
+		t.Fatalf("warnings = %q, correlation_id at the limit must not be reported", joined)
+	}
+}
+
+func TestRegisterTechnicalEventKeepsRawBodyOnlyWhenUndecodable(t *testing.T) {
+	tests := []struct {
+		name        string
+		decodeError string
+		wantRawBody bool
+	}{
+		{"decoded body with warnings", "", false},
+		{"undecodable body", "invalid character 'n'", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewRegisterTechnicalEventUseCase(&stubTechnicalEventRepository{}, &stubSystemSetupRepository{saved: basicSetupFixture()})
+
+			result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+				Message:          "x",
+				IngestionChannel: domain.IngestionHTTP,
+				RawRequestBody:   `{"message":"x"}`,
+				DecodeError:      tt.decodeError,
+			})
+			if err != nil {
+				t.Fatalf("Execute() unexpected error = %v", err)
+			}
+
+			meta, _ := result.Event.Payload["_ingestion"].(map[string]any)
+			_, hasRaw := meta["raw_request_body"]
+			if hasRaw != tt.wantRawBody {
+				t.Fatalf("raw_request_body present = %v, want %v (_ingestion = %#v)", hasRaw, tt.wantRawBody, meta)
+			}
+		})
+	}
+}
+
+func TestIsUUIDLike(t *testing.T) {
+	tests := map[string]bool{
+		"550e8400-e29b-41d4-a716-446655440000": true,  // v4
+		"0190f5a8-7b3c-7d4e-8f5a-1b2c3d4e5f60": true,  // v7
+		"1EC9414C-232A-6B00-B3C8-9E6BDECED846": true,  // v6, maiúsculas
+		"550e8400e29b41d4a716446655440000":     false, // sem hífens
+		"550e8400-e29b-41d4-a716-44665544000g": false,
+		"":                                     false,
+	}
+
+	for value, want := range tests {
+		if got := isUUIDLike(value); got != want {
+			t.Errorf("isUUIDLike(%q) = %v, want %v", value, got, want)
+		}
+	}
+}
+
+func TestRegisterTechnicalEventIgnoresClientLevelOnHTTP(t *testing.T) {
+	tests := []struct {
+		channel domain.IngestionChannel
+		want    domain.Severity
+	}{
+		{domain.IngestionHTTP, domain.SeverityInfo},
+		{domain.IngestionFile, domain.SeverityFatal},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.channel), func(t *testing.T) {
+			uc := NewRegisterTechnicalEventUseCase(&stubTechnicalEventRepository{})
+
+			result, err := uc.Execute(context.Background(), RegisterTechnicalEventInput{
+				Message:          "all good",
+				Payload:          map[string]any{"level": "fatal"},
+				IngestionChannel: tt.channel,
+				ApplicationID:    "550e8400-e29b-41d4-a716-446655440000",
+				SourceID:         "660e8400-e29b-41d4-a716-446655440001",
+				EnvironmentID:    "770e8400-e29b-41d4-a716-446655440002",
+			})
+			if err != nil {
+				t.Fatalf("Execute() unexpected error = %v", err)
+			}
+			if result.Event.Severity != tt.want {
+				t.Fatalf("Severity = %q, want %q", result.Event.Severity, tt.want)
+			}
+			if result.Event.Payload["level"] != "fatal" {
+				t.Fatal("payload.level must still be stored as data")
+			}
+		})
 	}
 }

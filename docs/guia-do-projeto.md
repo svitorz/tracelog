@@ -2,7 +2,7 @@
 
 Documento de referência para retomar o desenvolvimento do TraceLog. Descreve o estado atual do código, como instalar, compilar, executar e testar, e o que ainda precisa de atenção.
 
-> Este guia foi escrito a partir do código no commit `456c830`. Quando algo aqui divergir do código, o código prevalece. As divergências conhecidas com os outros documentos de `docs/` estão listadas na seção [Divergências conhecidas](#divergências-conhecidas-na-documentação).
+> Este guia foi escrito a partir do código no commit `456c830` e atualizado com as mudanças da spec 0002 (fase 2, 2026-11-20). Quando algo aqui divergir do código, o código prevalece. As divergências conhecidas com os outros documentos de `docs/` estão listadas na seção [Divergências conhecidas](#divergências-conhecidas-na-documentação).
 
 ---
 
@@ -26,6 +26,7 @@ Histórico resumido. Os commits completos estão em `git log`.
 | Área | Entrega | Commits de referência |
 |------|---------|----------------------|
 | HTTP | Servidor com `POST /events` e `GET /health`, respostas JSON | `d4cc38e`, `2d01da8` |
+| HTTP (spec 0002) | Timeouts, graceful shutdown, limite de corpo (413), `415`, erros sem vazamento, deduplicação por aplicação, `/ready` | branch `fix/http-hardening` |
 | Configuração | Carga de `.env` na raiz e variáveis de ambiente, com validação | `ddf3c6b`, `6aa3009`, `2eece1b` |
 | CLI | Estrutura com Cobra; comandos `serve`, `events list`, `metrics errors`, `db list` | `812cccc`, `e9f51b8`, `c8047b1` |
 | Domínio | Entidades `TechnicalEvent`, `MonitoredApplication`, `EventSource`, `Environment`; enums de severidade, categoria e canal | `eaa0014`, `ce03421` |
@@ -52,7 +53,7 @@ Histórico resumido. Os commits completos estão em `git log`.
 
 | Ferramenta | Versão | Observação |
 |------------|--------|------------|
-| Go | **1.24.4+** (conforme `go.mod`) | Os docs antigos citam 1.21 e 1.25; a referência válida é o `go.mod`. |
+| Go | **1.26.11** (conforme `go.mod`) | Os docs antigos citam 1.21 e 1.25; a referência válida é o `go.mod`. Com `GOTOOLCHAIN=auto` (padrão), um Go mais antigo baixa essa versão sozinho. |
 | Docker + Docker Compose | Plugin `docker compose` | Usado para subir o PostgreSQL 16. |
 | `psql` | Opcional | Só para inspeção manual; os scripts usam `psql` dentro do container. |
 | Git | Qualquer versão recente | |
@@ -95,6 +96,7 @@ DB_SSLMODE=disable
 | `APP_NAME` | não | `tracelog` | Nome exibido no log do `serve`. |
 | `APP_ENV` | não | `local` | Ambiente exibido no log do `serve`. |
 | `HTTP_PORT` | não | `8080` | Porta do servidor HTTP (1–65535). |
+| `HTTP_MAX_BODY_BYTES` | não | `1048576` | Tamanho máximo do corpo de `POST /events`, em bytes. Acima disso: `413`. Precisa ser positivo. |
 | `DB_HOST` | não | `localhost` | Host do PostgreSQL. |
 | `DB_PORT` | não | `5432` | Porta do PostgreSQL; também é a porta publicada pelo Docker. |
 | `DB_NAME` | **sim** | — | Nome do banco. |
@@ -140,6 +142,7 @@ Migrations atuais:
 |---------|----------|
 | `000001_initial_schema.sql` | Tabelas `environment`, `monitored_application`, `event_source`, `technical_event`, FKs e índices. |
 | `000002_add_log_import_fields.sql` | Colunas `raw_line`, `normalization_status`, `parse_error` em `technical_event` e índice. |
+| `000003_external_id_per_application.sql` | Troca o `UNIQUE (external_id)` global por índice único parcial em `(application_id, external_id)` onde `external_id` não é nulo. |
 
 > **Importante:** não há controle de versão. Cada execução reaplica todos os arquivos. Por isso cada migration usa `IF NOT EXISTS`. Qualquer migration nova precisa seguir o mesmo padrão idempotente, ou o script precisa ser evoluído para registrar o que já foi aplicado.
 
@@ -221,7 +224,9 @@ Saída esperada:
 
 Se o setup estiver ausente, o `serve` falha com: `basic system setup is missing; run \`tracelog init\` before \`tracelog serve\``.
 
-Para encerrar: `Ctrl+C` (SIGINT). Observação: o servidor usa `http.ListenAndServe` direto, sem *graceful shutdown*. Os docs que falam em shutdown gracioso estão imprecisos.
+Para encerrar: `Ctrl+C` (SIGINT) ou `SIGTERM`. O servidor para de aceitar conexões, espera as requisições em andamento por até 8s, fecha o pool do banco e imprime `[serve] Shutdown complete`.
+
+Timeouts do servidor (justificados na spec 0002): leitura de cabeçalho 5s, leitura 15s, escrita 15s, ociosidade 60s, 10s por requisição de `POST /events`. Pool do banco: até 10 conexões.
 
 ---
 
@@ -233,8 +238,9 @@ Base: `http://localhost:8080` (ou a porta configurada).
 
 | Método | Rota | Função |
 |--------|------|--------|
-| `GET` | `/health` | Retorna `{"status":"ok"}`. Não checa o método. |
-| `POST` | `/events` | Registra um evento. Retorna `201 Created`. |
+| `GET`, `HEAD` | `/health` | Liveness: `200 {"status":"ok"}`. Não consulta o banco. |
+| `GET`, `HEAD` | `/ready` | Readiness: ping no banco com timeout de 2s. `200 {"status":"ready"}` ou `503 {"status":"unavailable"}`. |
+| `POST` | `/events` | Registra um evento. `201` se novo, `200` se já existia (ver deduplicação). |
 
 Corpo do `POST /events`:
 
@@ -244,16 +250,20 @@ Corpo do `POST /events`:
 | `occurred_at` | string | não | RFC3339 (com ou sem fração/offset) ou `YYYY-MM-DD HH:MM:SS`. Ausente/inválido → usa o horário de recebimento. |
 | `category` | string | não | `application`, `system`, `security`, `audit`, `unknown`. Ausente/inválido → `unknown`. |
 | `payload` | objeto | não | JSON livre. |
-| `external_id` | string | não | Vazio vira `NULL`. Deve ser único. |
-| `trace_id` | string | não | |
-| `correlation_id` | string | não | |
-| `application_id` | UUID | não* | Ausente/inválido → setup do `init`. |
+| `external_id` | string | não | Vazio vira `NULL` (sem deduplicação). Acima de 255 caracteres é truncado. |
+| `trace_id` | string | não | Acima de 128 caracteres é truncado. |
+| `correlation_id` | string | não | Acima de 128 caracteres é truncado. |
+| `application_id` | UUID | não* | Qualquer versão de UUID. Ausente/inválido → setup do `init`. |
 | `source_id` | UUID | não* | Ausente/inválido → setup do `init`. |
 | `environment_id` | UUID | não* | Ausente/inválido → setup do `init`. |
 
 \* Na prática são opcionais, desde que o `init` tenha sido executado (há fallback). Use sempre os IDs retornados pelo `init` para não depender do fallback.
 
-**Campos que não existem mais no contrato:** `severity` é **ignorado** se enviado. O servidor deriva a severidade (seção 7.3).
+**Campos que não existem mais no contrato:** `severity` é **ignorado** se enviado, e `payload.level` é guardado mas não define a severidade. O servidor deriva a severidade (seção 7.3).
+
+`Content-Type` pode ser omitido; se enviado, precisa ser `application/json` (ou `*/*+json`), senão a resposta é `415`.
+
+**Deduplicação:** dois eventos com o mesmo `external_id` na mesma aplicação (`application_id` já normalizado) são o mesmo evento. O reenvio responde `200` com os dados do evento já gravado e `"duplicate": true`. Aplicações diferentes podem repetir o mesmo `external_id`.
 
 Exemplo:
 
@@ -271,25 +281,25 @@ curl -X POST http://localhost:8080/events \
   }'
 ```
 
-Resposta (`201`):
+Respostas reais capturadas no teste de fumaça da fase 2 (evento novo e reenvio com o mesmo `external_id`):
 
-```json
-{
-  "id": "<uuid>",
-  "external_id": "",
-  "received_at": "2026-03-09T14:30:01.234Z",
-  "created_at": "2026-03-09T14:30:01.234Z"
-}
+```text
+{"id":"432580d7-1242-4270-99d8-7198fef69d24","external_id":"smoke-1","received_at":"2026-11-20T16:03:43.446455-03:00","created_at":"2026-11-20T16:03:43.449417-03:00","duplicate":false}
+  [HTTP 201]
+{"id":"432580d7-1242-4270-99d8-7198fef69d24","external_id":"smoke-1","received_at":"2026-11-20T16:03:43.446455-03:00","created_at":"2026-11-20T16:03:43.449417-03:00","duplicate":true}
+  [HTTP 200]
 ```
 
 Erros:
 
 | Status | Quando |
 |--------|--------|
-| `405` | Método diferente de `POST` em `/events`. |
-| `500` | Falha ao persistir (ex.: banco fora do ar, violação de unicidade de `external_id`). |
+| `405` | Método não permitido; o cabeçalho `Allow` lista os aceitos. |
+| `413` | Corpo maior que `HTTP_MAX_BODY_BYTES`. Nada é gravado. |
+| `415` | `Content-Type` presente e diferente de JSON. Nada é gravado. |
+| `500` | Falha interna (ex.: banco fora do ar). A resposta é só `{"error":"internal error"}`; o detalhe vai para o log do servidor. |
 
-JSON malformado **não** gera erro: o evento é gravado com `payload._ingestion.decode_error`.
+JSON malformado **não** gera erro: o evento é gravado com `payload._ingestion.decode_error` e `payload._ingestion.raw_request_body`. O corpo bruto só é guardado nesse caso.
 
 ### 6.2 CLI
 
@@ -300,12 +310,12 @@ Com o binário compilado, substitua `go run .` por `tracelog`.
 | `serve` | Sobe o HTTP | `--http-port` |
 | `init` | Setup inicial interativo | — |
 | `events list` | Lista eventos (mais recentes primeiro) | `--severity`, `--application-id`, `--environment-id`, `--from`, `--to`, `--limit` (padrão 50) |
-| `metrics errors` | Contagem de erros por dia | `--application-id`, `--environment-id`, `--from`, `--to` |
+| `metrics errors` | Contagem de `error` e `fatal` por dia (UTC) | `--application-id`, `--environment-id`, `--from`, `--to` |
 | `db list environments\|applications\|sources` | Lista entidades de referência com IDs | — |
 | `import logs` | Importa arquivos de log | `--file` (obrigatório, repetível) |
 | `seed` | **No-op** (apenas imprime mensagem) | — |
 
-Formatos de data em `--from`/`--to`: `2026-03-09` (00:00 UTC) ou RFC3339 (`2026-03-09T14:30:00Z`).
+Formatos de data em `--from`/`--to`: RFC3339 (`2026-03-09T14:30:00Z`, usado como está) ou `2026-03-09`. Só a data em `--from` vale 00:00 UTC; em `--to` vale o dia inteiro (até 23:59:59.999999999 UTC).
 
 Exemplos:
 
@@ -367,17 +377,19 @@ Aplicada em `register_technical_event_usecase.go`:
 
 ### 7.3 Derivação de severidade
 
-Ordem de avaliação (a primeira regra que casar vence):
+Ordem de avaliação (a primeira regra que casar vence). As palavras da mensagem são comparadas como **palavras inteiras**, sem diferenciar maiúsculas; a lista completa, com flexões (`crashed`, `timeouts`...), fica em `register_technical_event_usecase.go`.
 
-1. `payload.level` com valor reconhecido (`trace`/`debug`, `info`, `warn`/`warning`, `error`/`err`, `fatal`/`critical`/`panic`).
-2. Mensagem contém `panic`, `fatal`, `unrecoverable` ou `crash`, **ou** payload tem `panic`, `fatal` ou `stack_trace` com valor significativo → `fatal`.
-3. Mensagem contém `error`, `failed`, `failure`, `timeout`, `exception`, `unauthorized` ou `denied`, **ou** payload tem `error`, `errors`, `exception` ou `exception_message` → `error`.
-4. Categoria `security`, **ou** mensagem contém `warn`, `warning`, `retry`, `deprecated`, `slow` ou `fallback`, **ou** payload tem `warning`, `warnings` ou `retry_count` → `warn`.
+1. **Só fora do HTTP** (ex.: `import logs`): `payload.level` com valor reconhecido (`trace`/`debug`, `info`, `warn`/`warning`, `error`/`err`, `fatal`/`critical`/`panic`). No HTTP esse campo é ignorado para a severidade.
+2. Mensagem tem `panic`, `fatal`, `unrecoverable`, `crash` (e flexões), **ou** payload tem `panic`, `fatal` ou `stack_trace` com valor significativo → `fatal`.
+3. Mensagem tem `error`, `failed`, `failure`, `timeout`, `exception`, `unauthorized`, `denied` (e flexões), **ou** um nome de tipo CamelCase terminado em `Error`/`Exception` (`TypeError`, `IOException`), **ou** payload tem `error`, `errors`, `exception` ou `exception_message` → `error`.
+4. Categoria `security`, **ou** mensagem tem `warn`, `warning`, `retry`, `deprecated`, `slow`, `fallback` (e flexões), **ou** payload tem `warning`, `warnings` ou `retry_count` → `warn`.
 5. Caso contrário → `info`.
+
+Limitações conhecidas (documentadas em `severity_test.go`): a heurística não entende negação nem contexto. `0 errors found`, `report generated without failure` e `retry succeeded after timeout` continuam `error`.
 
 ### 7.4 Métricas
 
-`metrics errors` conta apenas `severity = 'error'`, agrupado por dia. Eventos `fatal` **não** entram na contagem (ver divergências).
+`metrics errors` conta `severity = 'error'` e `severity = 'fatal'` em colunas separadas (`ERRORS`, `FATAL`, `TOTAL`), agrupando por dia em UTC, independentemente do fuso do PostgreSQL. Dias sem `error` nem `fatal` não aparecem. Tabela e resumo vão para a saída padrão.
 
 ---
 
@@ -393,18 +405,23 @@ go test -coverprofile=coverage.out ./...        # cobertura
 go tool cover -html=coverage.out
 ```
 
-Estado no commit `456c830`: `go vet ./...` limpo e `go test ./...` passando.
+Estado na fase 2 (2026-11-20): `go vet ./...` limpo e `go test -race ./...` passando, inclusive os testes de integração com PostgreSQL 16.
 
 ### 8.2 Cobertura atual dos testes
 
 | Pacote | Testes | O que cobre |
 |--------|--------|-------------|
-| `internal/core/services` | 12 | Derivação de severidade, fallback de IDs e retry após FK, importação (multi-formato, JSON quebrado), `init` (normalização e campos obrigatórios), `EnsureSystemSetup`, listagem com normalização de severidade. |
-| `internal/config` | 3 | Defaults, variáveis obrigatórias, `.env` sem sobrescrever o ambiente. |
-| `internal/adapters/repository` | 1 | Mapeamento amigável de erro de FK. |
-| `internal/adapters/http`, `cmd`, `internal/core/domain` | 0 | Sem testes. |
+Contagem de funções `Test*` de nível superior (subtestes de tabela não somados):
 
-Os testes de `services` usam repositórios em memória (fakes) e **não** tocam o banco.
+| Pacote | Testes | O que cobre |
+|--------|--------|-------------|
+| `internal/core/services` | 19 | Tabela da heurística de severidade, `payload.level` por canal, fallback de IDs e retry só para `ErrReferenceNotFound`, truncagem, corpo bruto, UUID, duplicata, importação, `init`, listagem. |
+| `internal/adapters/http` | 15 | Handler com `httptest` (201, 200 duplicata, JSON inválido gravado, 405, 413, 415, contexto, erro sem vazamento, fallback de FK), `/health`, `/ready`, graceful shutdown. |
+| `internal/adapters/repository` | 7 | 4 de integração com PostgreSQL (deduplicação, FK, filtros, `metrics errors` em UTC) + pool e mapeamento de erro de FK. |
+| `internal/config` | 4 | Defaults, obrigatórias, `.env`, validação de `HTTP_MAX_BODY_BYTES`. |
+| `cmd` | 2 | Saída de `metrics errors` e limites de `--from`/`--to`. |
+
+Os testes de `services` e `http` usam fakes em memória. Os de integração só rodam com `TRACELOG_TEST_DATABASE_URL` (ex.: `postgres://postgres:postgres@127.0.0.1:5432/tracelog?sslmode=disable`); cada teste cria e apaga um schema próprio, sem tocar nas tabelas existentes. Sem a variável eles aparecem como `SKIP`. O CI roda com um PostgreSQL 16 de serviço.
 
 ### 8.3 Teste manual de ponta a ponta
 
@@ -431,9 +448,8 @@ go run . import logs --file /tmp/tracelog-sample.log
 
 ### 8.4 Lacunas de teste
 
-- Não há testes de integração contra PostgreSQL real (o `docs/development.md` descreve um banco `tracelog_test`, mas nenhum teste o usa).
-- Não há testes do handler HTTP (`EventHandler`, `Server`).
-- Não há testes dos comandos da CLI.
+- O `docs/development.md` descreve um banco `tracelog_test`; os testes de integração reais usam `TRACELOG_TEST_DATABASE_URL` (seção 8.2).
+- Os comandos da CLI só têm testes das funções de saída e de parsing, não da execução contra banco.
 
 ---
 
@@ -482,15 +498,13 @@ Dependências diretas (`go.mod`): `github.com/jackc/pgx/v5` e `github.com/spf13/
 ## 11. Limitações conhecidas
 
 1. **Migrations sem controle de versão** (seção 4.4).
-2. **`external_id` duplicado** gera `500` (violação da constraint `uq_technical_event_external_id`). Não há tratamento específico nem resposta `409`. Não verificado em execução.
+2. **Truncagem de `external_id`**: dois valores longos com os mesmos 255 primeiros caracteres viram o mesmo evento (risco aceito na spec 0002).
 3. **Sem validação de `message`** no HTTP: qualquer valor é aceito e normalizado.
 4. **Sem autenticação, rate limiting ou versionamento** de API (`/v1`). Documentado como futuro.
-5. **Sem graceful shutdown** no servidor.
-6. **Erros de validação do HTTP são 500**, não 400, porque o caso de uso só rejeita canal inválido (que o HTTP nunca envia).
-7. **`seed` não popula nada.**
-8. **`--help` exige `.env` válido.**
-9. **Métricas ignoram `fatal`.**
-10. Não há Makefile nem CI configurada.
+5. **Heurística de severidade** não entende negação (seção 7.3).
+6. **`seed` não popula nada.**
+7. **`--help` exige `.env` válido.**
+8. Não há Makefile (previsto para a fase 3). O CI está em `.github/workflows/ci.yml`: gofmt, `go vet`, `go test -race` com PostgreSQL e build.
 
 ---
 
@@ -500,8 +514,8 @@ Os arquivos abaixo ainda descrevem comportamentos que não existem. Corrija-os a
 
 | Documento | Afirmação | Realidade no código |
 |-----------|-----------|---------------------|
-| `README.md`, `docs/getting-started.md` | Go 1.25+ | `go.mod` declara 1.24.4 |
-| `docs/development.md` | Go 1.21+ | `go.mod` declara 1.24.4 |
+| `README.md`, `docs/getting-started.md` | Go 1.25+ | `go.mod` declara 1.26.11 |
+| `docs/development.md` | Go 1.21+ | `go.mod` declara 1.26.11 |
 | `docs/http-api.md`, `docs/development.md` | `severity` obrigatório/enviado no `POST /events` | Ignorado; severidade é derivada |
 | `docs/http-api.md` | `400` para campos ausentes, `message is required`, JSON inválido | Não existe; dados são normalizados e gravados com `201` |
 | `docs/cli.md`, `docs/getting-started.md` | `seed` popula ambientes, apps e fontes | `seed` só imprime mensagem |
@@ -510,10 +524,8 @@ Os arquivos abaixo ainda descrevem comportamentos que não existem. Corrija-os a
 | `docs/development.md` | `scripts/setup-demo-data.sh`, `scripts/seed-error-data.sh` | Não existem |
 | `docs/architecture.md` | Driver `github.com/lib/pq` | Driver real: `pgx/v5` (stdlib) |
 | `docs/development.md` | `.env` na raiz e `go run . serve` funcionam de qualquer pasta | `.env` é lido do diretório atual |
-| `docs/domain.md` | Métricas consideram `error` e `fatal` | Apenas `error` |
 | `docs/domain.md` | Canal `file` "futuro" | Implementado (`import logs`) |
 | `docs/cli.md` | Colunas de `events list`: `MESSAGE` antes de `SEVERITY` | Ordem real: `OCCURRED_AT SEVERITY APPLICATION_ID ENVIRONMENT_ID MESSAGE` |
-| `docs/cli.md` | `serve` com shutdown gracioso | Sem graceful shutdown |
 
 ---
 
@@ -523,15 +535,12 @@ Itens não implementados ou que merecem decisão antes de avançar:
 
 1. **Corrigir a documentação** conforme a seção 12 (ou consolidar `docs/` em torno deste guia).
 2. **Controle de migrations**: tabela de versões no banco ou ferramenta dedicada, em vez de reaplicar tudo.
-3. **Tratar `external_id` duplicado** com resposta clara (ex.: `409`) e decidir se deve ser idempotente.
-4. **Testes de integração** com PostgreSQL (repositórios e fluxo `init` → `POST /events` → `events list`).
-5. **Testes do handler HTTP** (`httptest`) para método, JSON inválido e status codes.
-6. **Decidir sobre `fatal` em `metrics errors`.**
-7. **Validação de entrada HTTP** (ex.: `message` obrigatória) versus a política atual de ingestão tolerante.
-8. **Graceful shutdown** do servidor (`signal.NotifyContext` + `http.Server.Shutdown`).
-9. **Ferramentas de DX**: `Makefile` com `build`, `test`, `vet`, `migrate`, ou documentar a ausência.
-10. **Integração RabbitMQ** (`internal/adapters/amqp/`), conforme `docs/architecture.md`.
+3. **Lote e `external_id` obrigatório** (spec 0001, D3 e D5), adiados para depois da v0.1.0.
+4. **Testes de ponta a ponta da CLI** contra banco (`init` → `POST /events` → `events list`).
+5. **Validação de entrada HTTP** (ex.: `message` obrigatória) versus a política atual de ingestão tolerante.
+6. **Ferramentas de DX**: `Makefile` com `build`, `test`, `vet`, `migrate`, ou documentar a ausência.
+7. **Integração RabbitMQ** (`internal/adapters/amqp/`), conforme `docs/architecture.md`.
 
 ---
 
-**Última atualização deste guia:** commit `456c830` (2026-10-15).
+**Última atualização deste guia:** fase 2, spec 0002 (2026-11-20).

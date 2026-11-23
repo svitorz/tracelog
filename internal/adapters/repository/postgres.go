@@ -13,12 +13,26 @@ import (
 
 const defaultPingTimeout = 5 * time.Second
 
+// Limites do pool (spec 0002, seção 4.1). Sem eles, database/sql abre conexões sem teto e
+// uma rajada de requisições pode esgotar o max_connections do PostgreSQL (100 por padrão).
+const (
+	maxOpenConns    = 10
+	maxIdleConns    = 10
+	connMaxLifetime = 30 * time.Minute
+	connMaxIdleTime = 5 * time.Minute
+)
+
 // OpenPostgres abre um pool SQL para PostgreSQL com base na configuração.
 func OpenPostgres(cfg config.DBConfig) (*sql.DB, error) {
 	db, err := sql.Open("pgx", cfg.DSN())
 	if err != nil {
 		return nil, fmt.Errorf("erro ao abrir conexão PostgreSQL: %w", err)
 	}
+
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetConnMaxLifetime(connMaxLifetime)
+	db.SetConnMaxIdleTime(connMaxIdleTime)
 
 	return db, nil
 }

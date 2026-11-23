@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"svitorz/tracelog/internal/core/domain"
 	"svitorz/tracelog/internal/core/ports"
@@ -24,12 +23,14 @@ func (r *PostgresErrorFrequencyRepository) GetErrorFrequencyByDay(ctx context.Co
 		return nil, fmt.Errorf("database connection is nil")
 	}
 
+	// Days are UTC regardless of the session TimeZone, matching the UTC --from/--to of the CLI.
 	query := `
 		SELECT
-			DATE(occurred_at) AS event_date,
-			COUNT(*) AS event_count
+			(occurred_at AT TIME ZONE 'UTC')::date AS event_date,
+			COUNT(*) FILTER (WHERE severity = 'error') AS error_count,
+			COUNT(*) FILTER (WHERE severity = 'fatal') AS fatal_count
 		FROM technical_event
-		WHERE severity = 'error'
+		WHERE severity IN ('error', 'fatal')
 	`
 
 	args := make([]any, 0, 4)
@@ -69,19 +70,12 @@ func (r *PostgresErrorFrequencyRepository) GetErrorFrequencyByDay(ctx context.Co
 
 	frequencies := make([]domain.ErrorFrequency, 0)
 	for rows.Next() {
-		var (
-			date  time.Time
-			count int64
-		)
-
-		if err := rows.Scan(&date, &count); err != nil {
+		var freq domain.ErrorFrequency
+		if err := rows.Scan(&freq.Date, &freq.Errors, &freq.Fatal); err != nil {
 			return nil, fmt.Errorf("failed to scan error frequency: %w", err)
 		}
 
-		frequencies = append(frequencies, domain.ErrorFrequency{
-			Date:  date,
-			Count: count,
-		})
+		frequencies = append(frequencies, freq)
 	}
 
 	if err := rows.Err(); err != nil {
