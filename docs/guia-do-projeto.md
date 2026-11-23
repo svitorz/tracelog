@@ -136,7 +136,7 @@ make demo                    # demonstração de ponta a ponta (seção 5.4)
 
 ### 4.0 Front-end (`web/`, em construção)
 
-O dashboard da spec 0006 está sendo construído em `web/` (Vite, React, TypeScript `strict`). Por enquanto há só uma página de prova de vida, que mostra se a UI alcança a API; as telas e o embed no binário ainda não existem. Exige o Node de `web/.nvmrc` (24.13.0).
+O dashboard da spec 0006 está sendo construído em `web/` (Vite, React, TypeScript `strict`). Por enquanto há a página de prova de vida (`/ui/`, mostra se a UI alcança a API) e a tela **Eventos** (`/ui/events`: filtros, paginação por cursor e estado na URL). O detalhe do evento, a Visão geral e o embed no binário ainda não existem. Exige o Node de `web/.nvmrc` (24.13.0).
 
 ```bash
 make web-install     # npm ci
@@ -494,7 +494,7 @@ TRACELOG_TEST_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/tracelog
 | `internal/config` | 6 | Defaults, obrigatórias, `.env`, `HTTP_MAX_BODY_BYTES`, `HTTP_HOST`, escape do DSN |
 | `cmd` | 5 | Saídas de `metrics` e `import`, `--from`/`--to`, `init --defaults` |
 | `tools/loggen` | 2 | Determinismo e igualdade com `examples/logs` |
-| `web/` (Vitest) | 18 | Cliente HTTP (sucesso, `400` com `field`, `404`, `500`, rede fora, resposta não JSON), chaves dos tipos TS contra as fixtures `testdata/api`, página de prova de vida, regra do ESLint contra HTML cru |
+| `web/` (Vitest) | 35 | Tela Eventos (filtros na URL, paginação com voltar, `<script>` como texto, estados de erro), filtros ↔ query string, horário UTC; cliente HTTP (sucesso, `400` com `field`, `404`, `500`, rede fora, resposta não JSON), chaves dos tipos TS contra as fixtures `testdata/api`, página de prova de vida, regra do ESLint contra HTML cru |
 
 Os testes de integração criam e apagam um schema próprio por teste, sem tocar nas tabelas existentes. O CI (`.github/workflows/ci.yml`) roda gofmt, `go vet`, `go test -race` contra um PostgreSQL 16 de serviço, `go build`; num segundo job, `docker build` com checagem de que a imagem não roda como root; num terceiro, `npm ci`, lint, typecheck, testes e build do front.
 
