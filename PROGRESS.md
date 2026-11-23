@@ -4,7 +4,7 @@ Memória de trabalho do preparo do TraceLog para portfólio (v0.1.0). Leia este 
 
 ## Fase atual
 
-**Fase 7 (release v0.1.0) concluída** no branch `release/v0.1.0`, que contém toda a cadeia (`fix/http-hardening` → `feat/container` → `feat/sample-data` → `docs/audit` → `release/v0.1.0`). Pronta para o autor publicar: merge em `main`, tag e release (comandos abaixo). Nenhuma tag foi criada e nada foi enviado além do que o autor já tinha feito.
+**Trilha 1 encerrada.** Toda a cadeia foi mesclada no `main` pelos PRs #2, #3 e #4 (merge `492f362`), com CI verde, e a tag anotada `v0.1.0` aponta para `492f362`. **Trabalho em andamento: Trilha 2** (seção "Trilha 2: API de leitura e dashboard", no fim deste arquivo).
 
 ## Checklist
 
@@ -262,4 +262,71 @@ Achados novos (não estavam nas hipóteses): ver "Achados fora de escopo" e o re
 
 ## Próximo passo
 
-Autor: (opcional) gravar o GIF; abrir o PR `release/v0.1.0` → `main` e esperar o CI; após o merge, criar a tag anotada `v0.1.0` no `main` e a release no GitHub com o texto entregue no fim da fase 7; aplicar descrição e topics. Trabalho seguinte: dashboard e endpoints de leitura (outro prompt) ou a Fase 5 (medição de banco), se pedida.
+Trilha 1: nada pendente além do opcional (gravar o GIF com `docs/demo.tape`; a Fase 5, medição de banco, não foi pedida). PR, merge, tag `v0.1.0` e CI verde foram concluídos e verificados na Fase 0 da Trilha 2. O próximo passo do projeto está na Trilha 2, abaixo.
+
+---
+
+# Trilha 2: API de leitura e dashboard
+
+Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no mesmo repositório. Antecipa os itens 4 (API JSON e UI web) e 6 (dashboards) do roadmap do `AGENTS.md` por decisão do autor (portfólio). As specs das fases 1 e 3 são a aprovação exigida pelo `AGENTS.md` para sair do escopo do MVP.
+
+## Fase atual (Trilha 2)
+
+**Fase 0 (orientação e portão) concluída** em `feat/read-api` (criado do `main` em `492f362`). Esperando o "continuar" do autor para a Fase 1 (spec 0005).
+
+## Checklist (Trilha 2)
+
+| Fase | Branch | Status |
+|------|--------|--------|
+| 0. Orientação e portão | `feat/read-api` | concluída; P0–P4 satisfeitos |
+| 1. Spec 0005 (API de leitura) | `feat/read-api` | pendente |
+| 2. Implementação da API de leitura | `feat/read-api` | pendente |
+| 3. Spec 0006 (interface web) | a definir (parte do `main` após o merge da fase 2) | pendente |
+| 4. Scaffold de `web/` e CI | `feat/web-dashboard` | pendente |
+| 5. Telas (Eventos, Detalhe, Visão geral) | `feat/web-dashboard` | pendente |
+| 6. Integração e entrega | `docs/dashboard` | pendente |
+| 7. Documentação e release | `docs/dashboard` | pendente |
+
+## Log de decisões (Trilha 2)
+
+| Data | Decisão | Porquê |
+|------|---------|--------|
+| 2026-11-23 | Antecipar "API JSON e UI web" (roadmap item 4) e dashboards (item 6) para antes do núcleo de investigação (item 1) e do SQLite (item 2) | Decisão do autor (portfólio). Custo: a leitura nasce sobre a camada PostgreSQL específica; quando o SQLite vier, as consultas novas também terão de ser reescritas. Mitigação: leitura atrás de ports, SQL só nos adapters |
+| 2026-11-23 | Verificação da Fase 0 em clone limpo (`git clone` local em scratch) e ambiente descartável: Postgres `tracelog-t2p0-pg` em `127.0.0.1:55440`, demo com projeto compose `tracelog-t2p0` (`DB_PORT=55441`, `HTTP_PORT=18090`, `--env-file` fora do repositório) | A 5432 local é de outro projeto; nada do `.env` do repositório foi lido ou criado |
+| 2026-11-23 | CI do `main` consultado pela API pública do GitHub (`/commits/<sha>/check-runs`), porque o `gh` não está instalado | Regra: não presumir CI verde |
+
+## Medições (Trilha 2, Fase 0)
+
+Máquina: a mesma da trilha 1 (i5-1135G7, Linux 6.12), Go 1.26.11, PostgreSQL `16.16-alpine` em Docker. Uma execução por medição, cache quente (`shared hit`), sem média.
+
+| Verificação | Resultado |
+|-------------|-----------|
+| P0 `git rev-parse v0.1.0^{commit}` | `492f362` (merge do PR #4, HEAD do `main`); tag anotada; `CHANGELOG.md` nesse commit tem `## [0.1.0] - 2026-11-21` |
+| P1 `main` x `origin/main` | iguais (`492f362`), working tree limpo; specs 0001–0004, migrations 000001–000003, `Dockerfile`, `Makefile`, `examples/logs`, `tools/loggen`, `scripts/demo.sh` presentes |
+| P2 CI em `492f362` | `format, vet, test, build`: success; `docker build`: success (2026-11-23T20:11Z) |
+| P3 `make lint`, `make test` (com `TRACELOG_TEST_DATABASE_URL`), `make build` em clone limpo | exit 0; 64 `Test*` de topo passaram, 0 falhas, 0 skips, 6 pacotes ok; binário 19 MB |
+| P4 `make demo` (projeto compose novo, imagens base em cache) | exit 0 em 20 s; saída igual a `docs/demo-output.txt` normalizando UUIDs, horários de recebimento, porta e uptime (única diferença: o eco `./scripts/demo.sh` do `make`) |
+| Dataset versionado importado | 429 eventos, **1** aplicação, 1 ambiente; 14 dias com dados em março (11 com error/fatal); **51 eventos (12%) com `occurred_at` = hora do import** (2026-11-23), todos `partial`/`uncategorizable` (50 info, 1 warn) |
+| `loggen -scale 200` importado | 80.266 eventos em 38,4 s; tabela 97 MB; info 60.314, warn 14.906, error 5.045, **fatal 1** (o fatal não escala); 8.409 eventos com `occurred_at` = hora do import; 4.638 timestamps repetidos cobrindo 16.129 linhas |
+| Lista sem filtro (`ORDER BY occurred_at DESC LIMIT 50`) | Index Scan `idx_technical_event_occurred_at`, 0,04 ms, 7 buffers |
+| Lista `severity='error'` | Index Scan em `occurred_at` + Filter, 26.913 linhas descartadas, 6,1 ms, 11.041 buffers |
+| Lista `severity='fatal'` + período | Index Scan `idx_technical_event_severity` + Sort, 0,05 ms |
+| Frequência de erros (março) | Index Scan `idx_technical_event_severity` (5.046 linhas) + Sort + GroupAggregate, 2,9 ms |
+| Keyset `(occurred_at, id) <` + `ORDER BY occurred_at DESC, id DESC LIMIT 51` | Index Scan em `occurred_at` + **Incremental Sort**, 0,18 ms: o índice de coluna única já atende o desempate |
+| `OFFSET 40000` com a mesma ordenação | Seq Scan + Sort em disco (2,7 MB), 43 ms |
+| Contagem por severidade no período | Seq Scan, 30 ms |
+
+Limitações: cache quente, uma execução, um volume; os planos com filtro de aplicação/ambiente não foram medidos porque o dataset tem uma aplicação e um ambiente só. A medição formal com proposta (ou não) de índice é da Fase 2.
+
+Sobra: volume `tracelog-t2p0_tracelog_postgres_data` (dados sintéticos), somado aos da trilha 1. Nenhum container ficou rodando.
+
+## Achados fora de escopo (Trilha 2)
+
+- O mux devolve `404 page not found` em `text/plain` para rotas desconhecidas (padrão do `net/http`), não JSON. A API de leitura vai criar o primeiro 404 de verdade; decidir na spec 0005 se rotas desconhecidas também respondem JSON.
+- `ListTechnicalEventsUseCase` e `GetErrorFrequencyUseCase` devolvem erros de validação como `fmt.Errorf` sem tipo: o adapter HTTP não tem como distinguir 400 de 500 (relevante para a spec 0005).
+- `tools/loggen -scale N` não escala o evento `fatal` (1 em 80 mil); o gráfico de fatais fica quase vazio com o volume grande.
+- Eventos sem timestamp utilizável recebem `occurred_at` = hora do import (comportamento documentado no guia §5.3), o que espalha o dataset de março até o dia do import.
+
+## Próximo passo (Trilha 2)
+
+Autor: ler o relatório da Fase 0 e responder "continuar". Depois: Fase 1, escrever `docs/specs/0005-...md` (somente documento, status "Proposta").
