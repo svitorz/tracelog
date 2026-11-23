@@ -272,7 +272,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 
 ## Fase atual (Trilha 2)
 
-**Fase 2 (implementação da API de leitura) concluída** em `feat/read-api`, sem push, incluindo a migration 000004 (índice aprovado pelo autor). Pendente: push/PR pelo autor. A Fase 3 só começa com `feat/read-api` mesclado no `main` e CI verde.
+**Fase 3 (spec da interface web) entregue para aprovação** em `feat/web-dashboard` (criado do `main` em `6902f5e`, depois do merge do PR #5 com CI verde): `docs/specs/0006-interface-web.md`, status "Proposta". Nenhum código. Esperando as decisões (a)–(k) do autor.
 
 ## Checklist (Trilha 2)
 
@@ -280,8 +280,8 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 |------|--------|--------|
 | 0. Orientação e portão | `feat/read-api` | concluída; P0–P4 satisfeitos |
 | 1. Spec 0005 (API de leitura) | `feat/read-api` | concluída; aprovada em 2026-11-23 |
-| 2. Implementação da API de leitura | `feat/read-api` | concluída, com a migration 000004; sem push |
-| 3. Spec 0006 (interface web) | a definir (parte do `main` após o merge da fase 2) | pendente |
+| 2. Implementação da API de leitura | `feat/read-api` | concluída; PR #5 mesclado (`6902f5e`), CI verde no `main` |
+| 3. Spec 0006 (interface web) | `feat/web-dashboard` | proposta escrita; aguardando aprovação |
 | 4. Scaffold de `web/` e CI | `feat/web-dashboard` | pendente |
 | 5. Telas (Eventos, Detalhe, Visão geral) | `feat/web-dashboard` | pendente |
 | 6. Integração e entrega | `docs/dashboard` | pendente |
@@ -292,6 +292,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 1. ~~OK para refatorar `cmd/db.go`.~~ Dado pelo autor; feito em commit separado (`refactor:`).
 2. ~~Índice `(severity, occurred_at DESC, id DESC)`.~~ Aprovado pelo autor; migration 000004.
 3. Dataset com uma aplicação só (spec 0005, questão 2): decidir antes da Fase 6.
+4. Spec 0006, seção 8 (recomendação entre parênteses): (a) servir (embutido com `go:embed`); (b) caminho (`/ui/`); (c) gráfico (SVG próprio); (d) roteamento e dados (React Router + TanStack Query); (e) DOM dos testes (happy-dom); (f) Node (`24.13.0` exato); (g) lint (ESLint sem Prettier); (h) fuso (UTC); (i) idioma da UI (inglês); (j) URL e paginação (cursor na query, anterior pelo histórico); (k) fixtures compartilhadas (sim, alias `@fixtures`).
 
 ## Log de decisões (Trilha 2)
 
@@ -299,6 +300,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 |------|---------|--------|
 | 2026-11-23 | Antecipar "API JSON e UI web" (roadmap item 4) e dashboards (item 6) para antes do núcleo de investigação (item 1) e do SQLite (item 2) | Decisão do autor (portfólio). Custo: a leitura nasce sobre a camada PostgreSQL específica; quando o SQLite vier, as consultas novas também terão de ser reescritas. Mitigação: leitura atrás de ports, SQL só nos adapters |
 | 2026-11-23 | Spec 0005 aprovada com todas as recomendações: `/api/v1` (sem espelhar `POST /events`); keyset `(occurred_at, id)` com cursor opaco não assinado; dias vazios preenchidos no Go com `from`/`to` obrigatórios e teto de 366 dias; lista sem `payload`/`raw_line`/`parse_error`, detalhe completo; `HTTP_HOST` padrão `127.0.0.1` (compose `0.0.0.0`), sem CORS; `limit` 1–200 e `400` estrito com `code`/`field`; `data-range` com 14 dias até o erro mais recente; índice só com medição; três rotas de referência; sem severidade múltipla; cursor reaproveitável entre filtros | Decisão do autor; justificativas e alternativas descartadas na spec 0005 §8 |
+| 2026-11-23 | Spec 0006 e fase 4 no mesmo branch `feat/web-dashboard` | Como spec 0005 + fase 2 em `feat/read-api`: a spec é aprovada na conversa, sem PR próprio; o PR leva spec e scaffold juntos |
 | 2026-11-23 | Índice `idx_technical_event_severity_occurred_at` por migration 000004 | Decisão do autor (eu havia recomendado esperar: sem ele, toda consulta de tela já ficava abaixo de 45 ms). Ganho medido na lista filtrada e na contagem da Visão geral; custo ~8 µs por linha e 3,9 MB a cada 80 mil eventos. O índice só de `severity` ficou redundante e não foi removido (pede confirmação) |
 | 2026-11-23 | Novo caso de uso `ListEventsPageUseCase` em vez de mudar `ListTechnicalEventsUseCase` | A CLI não tem teto de `limit` e a spec 0005 exclui mudanças na CLI; os dois compartilham o port. Descartado: um caso de uso com modo "estrito" (flag que muda a validação) |
 | 2026-11-23 | `Limit *int` no input da página | Distingue ausente (padrão 50) de `limit=0` (400) sem o adapter decidir o padrão |
@@ -363,6 +365,20 @@ Outras verificações: integração (13 testes, inclusive 9 eventos com 7 timest
 
 Limitações: uma máquina, cache quente, volume com uma aplicação e um ambiente (filtros por eles não discriminam); o import de hoje levou 68,8 s contra 38,4 s na Fase 0 com o mesmo binário de import e o mesmo volume, o que indica variação da máquina (Docker e disco compartilhados), não regressão: o caminho de escrita não mudou. O diagrama Mermaid do README não foi validado por renderização (sem `mmdc` local).
 
+## Medições (Trilha 2, Fase 3)
+
+| Verificação | Resultado |
+|-------------|-----------|
+| CI no merge do PR #5 (`6902f5e`) | `format, vet, test, build` e `docker build`: success; árvore idêntica a `9cd8458` (head do PR, também verde) |
+| `go vet ./...` num módulo com `web/node_modules/pkg/bad.go` | falha (`expected declaration`): o Go percorre `node_modules` |
+| Mesmo teste com `web/go.mod` mínimo | exit 0; `go list ./...` não lista `web/` |
+| `flatted` (dependência do ESLint via `flat-cache`) no unpkg | publica `golang/pkg/flatted/flatted.go` |
+| `jsdom` 30.x e 31.x no registro npm | `engines.node`: `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0`; Node local: 24.13.0 |
+| `happy-dom` 21.0.4 | `engines.node`: `>=20.0.0` |
+| Recharts 3.11.1 | 11 dependências (inclui `@reduxjs/toolkit`, `react-redux`, `immer`, `victory-vendor`), 8,5 MB publicados |
+
+Método: metadados do registro npm (`/<pacote>/latest`, `unpackedSize`, `engines`, `dependencies`) e listagem do unpkg, sem instalar nada. `unpackedSize` não é tamanho de bundle; o bundle será medido no build (fase 4).
+
 ## Achados fora de escopo (Trilha 2)
 
 - O mux devolve `404 page not found` em `text/plain` para rotas desconhecidas (padrão do `net/http`), não JSON. A API de leitura vai criar o primeiro 404 de verdade; decidir na spec 0005 se rotas desconhecidas também respondem JSON.
@@ -377,4 +393,4 @@ Limitações: uma máquina, cache quente, volume com uma aplicação e um ambien
 
 ## Próximo passo (Trilha 2)
 
-Autor: push de `feat/read-api`, PR para `main`, CI verde e merge. Em seguida: Fase 3 (spec 0006 da interface web), em branch novo a partir do `main` atualizado.
+Autor: decidir (a)–(k) da spec 0006. Depois: status "Aprovada" e Fase 4 (scaffold de `web/` e CI) em `feat/web-dashboard`.
