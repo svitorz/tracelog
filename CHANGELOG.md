@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Strict validation on the read API: invalid, unknown or repeated parameters answer `400` with `code` and `field`; a missing event answers `404`; unknown paths under `/api/` answer JSON `404`.
 - `HTTP_HOST` setting for the address `tracelog serve` listens on.
 - Reference responses in `internal/adapters/http/testdata/api/`, checked by the handler tests.
+- Migration `000004`: index on `(severity, occurred_at DESC, id DESC)` for severity-filtered reads (measured: filtered list from ~11 ms to ~0.3 ms, severity counts from ~35 ms to ~20 ms on 80k events). Creating it locks writes on `technical_event` while it builds (190 ms for 80k rows).
 
 ### Changed
 

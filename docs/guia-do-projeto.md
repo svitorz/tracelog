@@ -102,8 +102,9 @@ Saída real numa base vazia e, em seguida, numa segunda execução:
 [migrate] applied 000001_initial_schema
 [migrate] applied 000002_add_log_import_fields
 [migrate] applied 000003_external_id_per_application
-[migrate] database is up to date (3 migrations)
-[migrate] database is up to date (3 migrations)
+[migrate] applied 000004_event_severity_occurred_at_index
+[migrate] database is up to date (4 migrations)
+[migrate] database is up to date (4 migrations)
 ```
 
 | Arquivo | Conteúdo |
@@ -111,6 +112,7 @@ Saída real numa base vazia e, em seguida, numa segunda execução:
 | `000001_initial_schema.sql` | Tabelas, FKs e índices (seção 8). Também cria a extensão `pgcrypto`, que nenhum código usa; foi mantida de propósito (spec 0003, seção 9). |
 | `000002_add_log_import_fields.sql` | Colunas `raw_line`, `normalization_status`, `parse_error` e índice. |
 | `000003_external_id_per_application.sql` | Troca o `UNIQUE (external_id)` global pelo índice único parcial `(application_id, external_id)`. |
+| `000004_event_severity_occurred_at_index.sql` | Índice `(severity, occurred_at DESC, id DESC)` para a lista filtrada por severidade e a contagem por severidade da API de leitura (spec 0005, seção 6). Sobre uma tabela grande, a criação bloqueia escritas enquanto dura (190 ms para 80 mil linhas). |
 
 ### 3.4 Setup inicial
 
@@ -275,7 +277,7 @@ $ curl -s 'http://127.0.0.1:18093/api/v1/events/ffffffff-ffff-4fff-bfff-ffffffff
 
 Respostas de referência de cada rota, usadas nos testes do handler e destinadas aos mocks do front: [`internal/adapters/http/testdata/api/`](../internal/adapters/http/testdata/api/). Para regravá-las depois de uma mudança consciente de contrato: `go test ./internal/adapters/http/ -run ReadAPIFixtures -update`.
 
-**Desempenho medido** (fase 2 da trilha 2, `loggen -scale 200`, 80.266 eventos, cache quente, sem índice novo): primeira página e página profunda por cursor ~0,2 ms; `severity=error` 11–13 ms; frequência de erros 3–6 ms; contagem por severidade 31–43 ms (Seq Scan); via HTTP, de 1 a 51 ms por requisição. Detalhes e método no `PROGRESS.md`.
+**Desempenho medido** (fase 2 da trilha 2, `loggen -scale 200`, 80.266 eventos, cache quente, com a migration 000004): primeira página e página profunda por cursor ~0,2 ms; `severity=error` 0,2–0,4 ms (11–13 ms antes do índice); frequência de erros 3–5 ms; contagem por severidade 14–26 ms (31–43 ms antes); detalhe por id 0,05 ms. Detalhes e método no `PROGRESS.md`.
 
 ### 5.2 CLI
 
@@ -423,7 +425,7 @@ Tabelas (nomes no singular), de `migrations/`:
 | `technical_event` | `id`, `external_id`, `occurred_at`, `received_at`, `message`, `severity`, `category`, `payload` (JSONB), `trace_id`, `correlation_id`, `raw_line`, `normalization_status`, `parse_error`, `ingestion_channel`, `application_id`, `source_id`, `environment_id`, `created_at` | FKs para as três tabelas acima; único parcial `(application_id, external_id)` |
 | `schema_migrations` | `version`, `applied_at` | criada pelo `tracelog migrate` |
 
-Índices de `technical_event`: `occurred_at DESC`, `severity`, `application_id`, `environment_id`, `trace_id`, `correlation_id`, `normalization_status` e o único parcial de deduplicação. As consultas da API de leitura foram medidas com esses índices na trilha 2 (seção 5.1.1); nenhum índice novo foi criado.
+Índices de `technical_event`: `occurred_at DESC`, `severity`, `(severity, occurred_at DESC, id DESC)` (000004, criado por medição na trilha 2; seção 5.1.1), `application_id`, `environment_id`, `trace_id`, `correlation_id`, `normalization_status` e o único parcial de deduplicação. O índice só de `severity` ficou redundante com o composto, mas não foi removido.
 
 Valores: `severity` ∈ `debug`, `info`, `warn`, `error`, `fatal`; `category` ∈ `application`, `system`, `security`, `audit`, `unknown`; `ingestion_channel` ∈ `http`, `file` (`cli` existe no domínio, mas nenhum comando o usa); `normalization_status` ∈ `normalized`, `partial`, `uncategorizable`.
 
@@ -473,7 +475,7 @@ TRACELOG_TEST_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/tracelog
 |--------|-----------------|-------|
 | `internal/core/services` | 37 | Tabelas de severidade, categoria e parser; normalização, truncagem, fallback e retry; duplicata; import (linhas vazias, erros, reimportação); `init`; listagem; leitura (paginação com timestamps iguais, última página cheia, validação, dias preenchidos em UTC, período padrão) |
 | `internal/adapters/http` | 23 | Ingestão com `httptest` (201, 200, 405, 413, 415, JSON inválido, contexto, erro sem vazamento, fallback), `/health`, `/ready`, shutdown; leitura contra as fixtures de `testdata/api`, parâmetros inválidos, cursor adulterado, escape de HTML, cabeçalhos, 404/405 |
-| `internal/adapters/repository` | 16 | 12 de integração com PostgreSQL (deduplicação, FK, filtros, `metrics` em UTC, migrate, adoção de banco legado, idempotência do setup, paginação com timestamps iguais, busca por ID, agregados, referência), pool, DSN do import, erro de FK |
+| `internal/adapters/repository` | 17 | 13 de integração com PostgreSQL (deduplicação, FK, filtros, `metrics` em UTC, migrate, adoção de banco legado, idempotência do setup, paginação com timestamps iguais, busca por ID, agregados, referência, índice 000004), pool, DSN do import, erro de FK |
 | `internal/config` | 6 | Defaults, obrigatórias, `.env`, `HTTP_MAX_BODY_BYTES`, `HTTP_HOST`, escape do DSN |
 | `cmd` | 5 | Saídas de `metrics` e `import`, `--from`/`--to`, `init --defaults` |
 | `tools/loggen` | 2 | Determinismo e igualdade com `examples/logs` |

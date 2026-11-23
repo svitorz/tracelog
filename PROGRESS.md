@@ -272,7 +272,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 
 ## Fase atual (Trilha 2)
 
-**Fase 2 (implementação da API de leitura) concluída** em `feat/read-api`, sem push. Pendente: decisão do autor sobre o índice `(severity, occurred_at DESC, id DESC)` (medido abaixo) e push/PR pelo autor. A Fase 3 só começa com `feat/read-api` mesclado no `main` e CI verde.
+**Fase 2 (implementação da API de leitura) concluída** em `feat/read-api`, sem push, incluindo a migration 000004 (índice aprovado pelo autor). Pendente: push/PR pelo autor. A Fase 3 só começa com `feat/read-api` mesclado no `main` e CI verde.
 
 ## Checklist (Trilha 2)
 
@@ -280,7 +280,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 |------|--------|--------|
 | 0. Orientação e portão | `feat/read-api` | concluída; P0–P4 satisfeitos |
 | 1. Spec 0005 (API de leitura) | `feat/read-api` | concluída; aprovada em 2026-11-23 |
-| 2. Implementação da API de leitura | `feat/read-api` | concluída; índice aguardando decisão; sem push |
+| 2. Implementação da API de leitura | `feat/read-api` | concluída, com a migration 000004; sem push |
 | 3. Spec 0006 (interface web) | a definir (parte do `main` após o merge da fase 2) | pendente |
 | 4. Scaffold de `web/` e CI | `feat/web-dashboard` | pendente |
 | 5. Telas (Eventos, Detalhe, Visão geral) | `feat/web-dashboard` | pendente |
@@ -290,7 +290,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 ## Decisões pendentes (Trilha 2)
 
 1. ~~OK para refatorar `cmd/db.go`.~~ Dado pelo autor; feito em commit separado (`refactor:`).
-2. **Índice `(severity, occurred_at DESC, id DESC)`**: medição na seção "Medições (Trilha 2, Fase 2)". Decisão do autor.
+2. ~~Índice `(severity, occurred_at DESC, id DESC)`.~~ Aprovado pelo autor; migration 000004.
 3. Dataset com uma aplicação só (spec 0005, questão 2): decidir antes da Fase 6.
 
 ## Log de decisões (Trilha 2)
@@ -299,6 +299,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 |------|---------|--------|
 | 2026-11-23 | Antecipar "API JSON e UI web" (roadmap item 4) e dashboards (item 6) para antes do núcleo de investigação (item 1) e do SQLite (item 2) | Decisão do autor (portfólio). Custo: a leitura nasce sobre a camada PostgreSQL específica; quando o SQLite vier, as consultas novas também terão de ser reescritas. Mitigação: leitura atrás de ports, SQL só nos adapters |
 | 2026-11-23 | Spec 0005 aprovada com todas as recomendações: `/api/v1` (sem espelhar `POST /events`); keyset `(occurred_at, id)` com cursor opaco não assinado; dias vazios preenchidos no Go com `from`/`to` obrigatórios e teto de 366 dias; lista sem `payload`/`raw_line`/`parse_error`, detalhe completo; `HTTP_HOST` padrão `127.0.0.1` (compose `0.0.0.0`), sem CORS; `limit` 1–200 e `400` estrito com `code`/`field`; `data-range` com 14 dias até o erro mais recente; índice só com medição; três rotas de referência; sem severidade múltipla; cursor reaproveitável entre filtros | Decisão do autor; justificativas e alternativas descartadas na spec 0005 §8 |
+| 2026-11-23 | Índice `idx_technical_event_severity_occurred_at` por migration 000004 | Decisão do autor (eu havia recomendado esperar: sem ele, toda consulta de tela já ficava abaixo de 45 ms). Ganho medido na lista filtrada e na contagem da Visão geral; custo ~8 µs por linha e 3,9 MB a cada 80 mil eventos. O índice só de `severity` ficou redundante e não foi removido (pede confirmação) |
 | 2026-11-23 | Novo caso de uso `ListEventsPageUseCase` em vez de mudar `ListTechnicalEventsUseCase` | A CLI não tem teto de `limit` e a spec 0005 exclui mudanças na CLI; os dois compartilham o port. Descartado: um caso de uso com modo "estrito" (flag que muda a validação) |
 | 2026-11-23 | `Limit *int` no input da página | Distingue ausente (padrão 50) de `limit=0` (400) sem o adapter decidir o padrão |
 | 2026-11-23 | Parsing de query string e cursor no adapter HTTP; faixas, `from <= to`, UUID e período máximo nos casos de uso | Codificação é detalhe de transporte; regra vale para qualquer adapter (MCP no futuro) |
@@ -356,7 +357,9 @@ HTTP ponta a ponta (`curl -w %{time_total}`, 5 execuções, servidor no host): l
 
 Custo do índice candidato `(severity, occurred_at DESC, id DESC)`: 3,9 MB para 80.266 linhas. `INSERT INTO clone SELECT * FROM technical_event` (80.266 linhas, cópia com os mesmos índices) sem/com o candidato: 4.022/5.050, 6.170/6.686, 5.845/6.262 ms, ou seja, +0,4 a +1,0 s (~8 µs por linha). No import real isso é 1–2% de 34–69 s. Imports reais de `-scale 20` (8.064 linhas) sem/com: 5,3/8,1, 5,3/6,5, 8,7/7,1 s, ruído maior que o efeito.
 
-Outras verificações: integração (12 testes, inclusive 9 eventos com 7 timestamps iguais em páginas de 3) com `TRACELOG_TEST_DATABASE_URL`; mutação `occurred_at < cursor` (keyset sem desempate) faz o teste de paginação falhar (`pages = 2, want 3`); `ss -ltn`: `127.0.0.1:18091` sem `HTTP_HOST` e `*:18091` com `0.0.0.0`; `db list` antes/depois da refatoração com `cmp` idêntico em stdout e stderr; `scripts/demo.sh` em projeto compose novo (`tracelog-t2p2`): exit 0 em 46 s, API de leitura respondendo na porta publicada, portas só em `127.0.0.1`, imagem 31,5 MB; exemplos `curl` do guia §5.1.1 capturados contra `examples/logs` importado.
+Com a migration 000004 aplicada pelo `tracelog migrate` (banco novo, mesmo volume importado depois): `EXPLAIN (ANALYZE, BUFFERS)`, três execuções, em ms: L1 0,17–0,23; L2 0,18–0,32; L3 **0,17–0,39**; L4 0,07–0,47; L5 0,06–0,23; L6 0,12–0,30; F1 2,8–4,6; C1 **14,2–26,1** (Index Only Scan no índice novo); D1 2,8–4,5; I1 0,05–0,06. O planejador usa o índice novo só em L3, L4, F1 e C1; os demais planos não mudaram. Import das 80.266 linhas com o índice: 65,8 s (68,8 s sem, hoje: diferença dentro do ruído). `CREATE INDEX` sobre 80.266 linhas: 190 ms. Limitação: o Index Only Scan da contagem depende do *visibility map*; logo depois de um import grande, antes do autovacuum, ele visita mais páginas da tabela.
+
+Outras verificações: integração (13 testes, inclusive 9 eventos com 7 timestamps iguais em páginas de 3) com `TRACELOG_TEST_DATABASE_URL`; mutação `occurred_at < cursor` (keyset sem desempate) faz o teste de paginação falhar (`pages = 2, want 3`); `ss -ltn`: `127.0.0.1:18091` sem `HTTP_HOST` e `*:18091` com `0.0.0.0`; `db list` antes/depois da refatoração com `cmp` idêntico em stdout e stderr; `scripts/demo.sh` em projeto compose novo (`tracelog-t2p2`): exit 0 em 46 s, API de leitura respondendo na porta publicada, portas só em `127.0.0.1`, imagem 31,5 MB; exemplos `curl` do guia §5.1.1 capturados contra `examples/logs` importado.
 
 Limitações: uma máquina, cache quente, volume com uma aplicação e um ambiente (filtros por eles não discriminam); o import de hoje levou 68,8 s contra 38,4 s na Fase 0 com o mesmo binário de import e o mesmo volume, o que indica variação da máquina (Docker e disco compartilhados), não regressão: o caminho de escrita não mudou. O diagrama Mermaid do README não foi validado por renderização (sem `mmdc` local).
 
@@ -370,7 +373,8 @@ Limitações: uma máquina, cache quente, volume com uma aplicação e um ambien
 - `docs/demo-output.txt` depende da ordem em que o `docker compose run` mistura stdout e stderr: o `Total: N event(s).` do `events list` (stderr) saiu antes da tabela na captura versionada e depois dela na execução da fase 2. Corrigir de vez exige a saída da CLI toda em stdout (pendência do guia §13).
 - Parser de `from`/`to` duplicado entre `cmd/events.go` e `internal/adapters/http/read_handler.go` (mesma regra); unificar num commit `refactor:` próprio.
 - A mensagem do `serve` ("listening on port N") não mostra o `HTTP_HOST`; mantida para não mudar a saída da CLI sem spec.
+- `idx_technical_event_severity` (000001) ficou redundante com o índice composto da 000004 (mesma coluna à esquerda). Removê-lo economiza escrita, mas é `DROP INDEX` numa migration nova e pede confirmação (AGENTS.md §12).
 
 ## Próximo passo (Trilha 2)
 
-Autor: decidir o índice candidato (medição acima); depois push de `feat/read-api`, PR para `main`, CI verde e merge. Em seguida: Fase 3 (spec 0006 da interface web), em branch novo a partir do `main` atualizado.
+Autor: push de `feat/read-api`, PR para `main`, CI verde e merge. Em seguida: Fase 3 (spec 0006 da interface web), em branch novo a partir do `main` atualizado.

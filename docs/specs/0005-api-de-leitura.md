@@ -276,7 +276,9 @@ Recomendação: **sim, com escopo pequeno.** Arquivos JSON em `internal/adapters
 
 ## 6. Mudanças de schema
 
-Nenhuma prevista. Um índice só entra na fase 2 se a medição `EXPLAIN (ANALYZE, BUFFERS)` com `loggen -scale 200` mostrar ganho em consulta usada por uma tela. Nesse caso entra por migration nova, idempotente, com o custo de escrita medido no import. Referência da Fase 0, com cache quente:
+**Decidido na implementação (autor, 2026-11-23):** `migrations/000004_event_severity_occurred_at_index.sql` cria `idx_technical_event_severity_occurred_at (severity, occurred_at DESC, id DESC)`, idempotente. Medido com `loggen -scale 200`: lista com `severity=error` de 11–13 ms para 0,2–0,4 ms; contagem por severidade de 31–43 ms (Seq Scan) para 14–26 ms (Index Only Scan); frequência de erros sem mudança relevante; 3,9 MB, cerca de 8 µs a mais por linha inserida e 190 ms para criar sobre 80 mil linhas (com bloqueio de escrita durante a criação, porque a migration roda em transação e não pode usar `CONCURRENTLY`). O índice antigo `idx_technical_event_severity` fica redundante, mas não foi removido (remoção de índice exige confirmação, AGENTS.md §12). Método e números completos no `PROGRESS.md`.
+
+Texto original da proposta: nenhuma prevista. Um índice só entra na fase 2 se a medição `EXPLAIN (ANALYZE, BUFFERS)` com `loggen -scale 200` mostrar ganho em consulta usada por uma tela. Nesse caso entra por migration nova, idempotente, com o custo de escrita medido no import. Referência da Fase 0, com cache quente:
 - primeira página sem filtro: 0,04 ms;
 - página por cursor: 0,18 ms (o índice de coluna única + *Incremental Sort* já atende o desempate);
 - `severity=error`: 6 ms, descartando 26.913 linhas (candidato a `(severity, occurred_at)`);
