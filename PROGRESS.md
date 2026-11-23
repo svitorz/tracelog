@@ -272,7 +272,7 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 
 ## Fase atual (Trilha 2)
 
-**Fase 4 (scaffold de `web/` e CI) concluída** em `feat/web-dashboard`, sem push. Próximo: push e PR pelo autor; a Fase 5 (telas) começa depois do merge com CI verde.
+**Fase 5, fatia 1 (Eventos) concluída** em `feat/web-events` (criado do `main` em `8361dc7`, depois do merge do PR #6 com os três jobs do CI verdes), sem push. Próximo: push/PR pelo autor; a fatia 5.2 (Detalhe) começa depois do merge.
 
 ## Checklist (Trilha 2)
 
@@ -282,8 +282,10 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 | 1. Spec 0005 (API de leitura) | `feat/read-api` | concluída; aprovada em 2026-11-23 |
 | 2. Implementação da API de leitura | `feat/read-api` | concluída; PR #5 mesclado (`6902f5e`), CI verde no `main` |
 | 3. Spec 0006 (interface web) | `feat/web-dashboard` | concluída; aprovada em 2026-11-23 |
-| 4. Scaffold de `web/` e CI | `feat/web-dashboard` | concluída; sem push |
-| 5. Telas (Eventos, Detalhe, Visão geral) | `feat/web-dashboard` | pendente |
+| 4. Scaffold de `web/` e CI | `feat/web-dashboard` | concluída; PR #6 mesclado (`8361dc7`), CI verde (3 jobs) |
+| 5.1 Tela Eventos | `feat/web-events` | concluída; sem push |
+| 5.2 Detalhe do evento | a definir | pendente |
+| 5.3 Visão geral | a definir | pendente |
 | 6. Integração e entrega | `docs/dashboard` | pendente |
 | 7. Documentação e release | `docs/dashboard` | pendente |
 
@@ -300,6 +302,12 @@ Objetivo: API JSON de leitura e dashboard web (React + TypeScript em `web/`) no 
 |------|---------|--------|
 | 2026-11-23 | Antecipar "API JSON e UI web" (roadmap item 4) e dashboards (item 6) para antes do núcleo de investigação (item 1) e do SQLite (item 2) | Decisão do autor (portfólio). Custo: a leitura nasce sobre a camada PostgreSQL específica; quando o SQLite vier, as consultas novas também terão de ser reescritas. Mitigação: leitura atrás de ports, SQL só nos adapters |
 | 2026-11-23 | Spec 0005 aprovada com todas as recomendações: `/api/v1` (sem espelhar `POST /events`); keyset `(occurred_at, id)` com cursor opaco não assinado; dias vazios preenchidos no Go com `from`/`to` obrigatórios e teto de 366 dias; lista sem `payload`/`raw_line`/`parse_error`, detalhe completo; `HTTP_HOST` padrão `127.0.0.1` (compose `0.0.0.0`), sem CORS; `limit` 1–200 e `400` estrito com `code`/`field`; `data-range` com 14 dias até o erro mais recente; índice só com medição; três rotas de referência; sem severidade múltipla; cursor reaproveitável entre filtros | Decisão do autor; justificativas e alternativas descartadas na spec 0005 §8 |
+| 2026-11-23 | Branch novo `feat/web-events` para a fatia 5.1, em vez de recriar `feat/web-dashboard` | Recriar o branch local (já mesclado) exigiria mover o ponteiro (`switch -C`), equivalente a um reset; um nome novo evita a operação |
+| 2026-11-23 | Formulário de filtros não controlado (`defaultValue` + `FormData`), remontado por `key` quando a URL muda | A URL é a única fonte de estado; sem `useState` espelhando a query string |
+| 2026-11-23 | `<select>` de referência remontado quando as opções chegam | Bug achado por teste: `defaultValue` só vale na montagem, então um `application_id` vindo da URL não ficava selecionado depois do carregamento |
+| 2026-11-23 | Valor de `from`/`to` que não é `YYYY-MM-DD` (ex.: RFC3339 colado na URL) mostrado em campo de texto | Um `<input type="date">` exibiria vazio e o próximo Apply apagaria o filtro |
+| 2026-11-23 | Rótulos explícitos (`htmlFor` + `useId`) em vez de `<label>` envolvendo o campo | A árvore de acessibilidade do navegador de teste não nomeava os campos de data com rótulo implícito; o explícito é mais robusto para tecnologias assistivas |
+| 2026-11-23 | `cleanup()` do Testing Library num `setupFiles`, sem `globals: true` | Sem isso o DOM vaza entre testes; ligar globais traria `describe`/`it` globais ao código |
 | 2026-11-23 | Spec 0006 aprovada com todas as recomendações: UI embutida com `go:embed` sob `/ui/` (`/` redireciona), build do Vite no módulo Go raiz e `web/go.mod` marcador; gráfico em SVG próprio; React Router + TanStack Query; happy-dom; Node `24.13.0` exato; ESLint sem Prettier; horários em UTC; UI em inglês; filtros e cursor na URL com "anterior" pelo histórico; fixtures de `testdata/api` por alias `@fixtures` | Decisão do autor; justificativas e alternativas descartadas na spec 0006 §8 |
 | 2026-11-23 | React Router em modo declarativo (`<BrowserRouter>`/`<Routes>`), não o data router (`createBrowserRouter`) | Medido: o data router ocupava 92 KB do bundle, o modo declarativo 35,6 KB; total de 110,6 para 93,0 KB gzip. As telas não usam loaders/actions; `useSearchParams`, `Link` e `useNavigate` existem nos dois modos. Detalhe de implementação dentro da dependência aprovada |
 | 2026-11-23 | Versões exatas no `package.json` (sem `^`) | Mesma disciplina do Go e do `.nvmrc`; o `package-lock.json` fixa as transitivas |
@@ -388,6 +396,42 @@ Limitações: uma máquina, cache quente, volume com uma aplicação e um ambien
 
 Método: metadados do registro npm (`/<pacote>/latest`, `unpackedSize`, `engines`, `dependencies`) e listagem do unpkg, sem instalar nada. `unpackedSize` não é tamanho de bundle; o bundle será medido no build (fase 4).
 
+## Fatia 5.1: Eventos (critérios de aceite)
+
+Derivados da spec 0006 §4.1, §4.3, §4.6–§4.8:
+
+1. `/ui/events` lista os eventos da API, mais recentes primeiro, 50 por página: `occurred_at` em UTC, severidade (texto, não só cor), categoria, mensagem (cortada visualmente, completa no `title`, com link para o detalhe), aplicação (nome) e canal.
+2. Filtros: severidade, aplicação, ambiente, `from` e `to` (datas). "Apply" escreve na URL só o que foi preenchido e remove o `cursor`; "Clear filters" volta a `/ui/events`.
+3. A URL é a fonte da verdade: recarregar, colar em outra aba ou voltar reproduz filtros e página; os controles refletem a URL.
+4. "Next page" faz *push* de `cursor` (o voltar do navegador retorna à página anterior); "First page" remove o `cursor`; sem `next_cursor`, "Next page" fica desabilitado.
+5. Estados: carregando (`aria-busy`), vazio com link para limpar, `400` com a mensagem da API junto do filtro indicado em `field` (`aria-invalid`), API fora com "Try again", `500` genérico.
+6. Mensagem com `<script>` aparece como texto (teste automatizado).
+7. Controles com rótulo, navegação por teclado, tabela semântica, foco visível.
+
+Fora desta fatia: a tela de detalhe (fatia 5.2; até lá o link da mensagem cai na página "not found"), a Visão geral (5.3).
+
+### Resultado da fatia 5.1
+
+Testes automatizados: 35 no front (17 novos: 10 da tela, 4 de filtros ↔ query string, 3 de horário UTC), cobrindo os critérios 1–7, inclusive mensagem `<script>` como texto, *push* no histórico com "voltar", `400` com `aria-invalid` no campo e retry. `make web-lint`, `web-typecheck`, `web-test`, `web-build`, `make lint` e `go test ./...` ok.
+
+Roteiro manual executado (API real em 127.0.0.1:18096 com `examples/logs`, Vite com proxy, navegador embutido):
+
+| Passo | Resultado |
+|-------|-----------|
+| 1. `/ui/events` sem filtro | 50 linhas, título "Events · TraceLog", "First page" desabilitado, "Next page" habilitado. As primeiras linhas são os 51 eventos sem timestamp datados no import (hoje) |
+| 2. Severidade `fatal` + Apply pelo teclado | URL `?severity=fatal`; 1 linha: 2026-03-10 14:47:00 UTC, "order worker crashed: connection pool exhausted"; "Next page" desabilitado; foco visível (contorno sólido 2px) |
+| 3. URL `?severity=error&from=2026-03-10&to=2026-03-10` | 25 linhas (o pico do dataset); controles mostram os valores da URL |
+| 4. `?severity=info`, "Next page" até o fim | 7 páginas, 316 eventos, 316 distintos (= total `info` do dataset); voltar do navegador da página 7 para a 6; "First page" volta a `?severity=info` |
+| 5. URL `?severity=critical` | alerta "Invalid request: severity must be one of debug, info, warn, error, fatal" com "Clear filters", sem "Try again"; select com `aria-invalid="true"` e o valor `critical` visível |
+| 6. 360×740 | página sem rolagem horizontal (`scrollWidth` 360); tabela rola dentro da caixa (913 px em 326 px); filtros empilhados |
+| 7. API parada | "Could not reach the TraceLog API." + "Try again"; console só com os 502/400 de rede provocados, sem erro de JavaScript |
+
+Contraste WCAG calculado a partir das cores OKLCH do `tailwindcss/theme.css` (conversão OKLCH → sRGB linear → luminância relativa): badges debug 13,37:1, info 8,24:1, warn 8,17:1, error 8,24:1, fatal 8,37:1; botão primário 6,82:1; links 8,84:1 e 6,82:1; alerta 9,21:1; texto 9,88:1 e 17,05:1. Todos ≥ 4,5:1 (AA).
+
+Bundle: JS 303,92 KB (95,53 KB gzip, +2,56 KB sobre a fase 4); CSS 11,89 KB (3,38 KB gzip).
+
+Achados da fatia: o `<input type="date">` nativo mostra a data no formato do idioma do navegador (`01/03/2026` em pt-BR) embora a UI seja em inglês e o valor enviado seja `2026-03-01`; a ferramenta de árvore de acessibilidade usada nomeia `<select>` pelo valor selecionado, não pelo rótulo (o rótulo está associado no DOM); "Clear filters" quebrava em duas linhas a 1280 px (corrigido com `whitespace-nowrap`).
+
 ## Medições (Trilha 2, Fase 4)
 
 Node 24.13.0, npm 11.6.2, mesma máquina.
@@ -424,4 +468,4 @@ Limitações: o tamanho por pacote é a parte dos bytes **não comprimidos** atr
 
 ## Próximo passo (Trilha 2)
 
-Autor: push de `feat/web-dashboard`, PR para `main`, CI verde (inclusive o job `web` novo) e merge. Depois: Fase 5, fatia 1 (Eventos: lista, filtros, paginação, estado na URL), em branch novo a partir do `main` atualizado.
+Autor: push de `feat/web-events`, PR para `main`, CI verde e merge. Depois: fatia 5.2 (Detalhe do evento), em branch novo a partir do `main` atualizado.
