@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -191,5 +192,18 @@ func TestIntegrationReferenceData(t *testing.T) {
 	sources, err := repo.ListSources(ctx)
 	if err != nil || len(sources) != 1 || sources[0].SourceType != "http" {
 		t.Fatalf("ListSources() = %+v, %v", sources, err)
+	}
+}
+
+func TestIntegrationSeverityOccurredAtIndexExists(t *testing.T) {
+	f := newIntegrationFixture(t)
+
+	var definition string
+	mustQueryRow(t, f.db, `SELECT indexdef FROM pg_indexes
+		WHERE schemaname = current_schema() AND indexname = 'idx_technical_event_severity_occurred_at'`, &definition)
+
+	want := "(severity, occurred_at DESC, id DESC)"
+	if !strings.Contains(definition, want) {
+		t.Fatalf("index definition = %q, want columns %s", definition, want)
 	}
 }
