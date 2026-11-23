@@ -151,9 +151,9 @@ Versões atuais no registro npm em 2026-11-23. Tamanho "publicado" é o `unpacke
 | `@tanstack/react-query` | 5.108.4 | runtime | 1,7 MB | Cache por chave (filtros), estados de carregando/erro, *retry*, sem `useEffect` manual em cada tela. Alternativa: hook próprio de `fetch`, que reimplementaria cache e cancelamento. |
 | `tailwindcss`, `@tailwindcss/vite` | 4.3.5 | build | 769 KB | CSS gerado só com as classes usadas, sem CSS-in-JS (compatível com a CSP sem `unsafe-inline`). |
 | `vite`, `@vitejs/plugin-react` | 8.3.8, 6.3.0 | build | 2,3 MB | Dev server com proxy e build. |
-| `typescript` | 7.0.2 | build | 2,4 MB | `strict: true`. |
+| `typescript` | 6.0.3 | build | 23 MB | `strict: true`. Não a 7.0.2 (a mais recente): o `typescript-eslint` 8.74 exige `typescript <6.1.0` (alterado na implementação, autor, 2026-11-23). |
 | `vitest` | 5.1.1 | teste | 2,8 MB | Integra com a config do Vite. |
-| `@testing-library/react`, `@testing-library/user-event` | 16.3.3, 14.6.13 | teste | 332 KB, 430 KB | Testes pelo que o usuário vê; teclado. Sem `@testing-library/jest-dom` (os *matchers* extras não são necessários). |
+| `@testing-library/react`, `@testing-library/dom`, `@testing-library/user-event` | 16.3.3, 10.4.2, 14.6.13 | teste | 332 KB, 2,4 MB, 430 KB | Testes pelo que o usuário vê; teclado. `@testing-library/dom` é peer obrigatório do `@testing-library/react` (acrescentado na implementação, autor, 2026-11-23). Sem `@testing-library/jest-dom` (os *matchers* extras não são necessários). |
 | `happy-dom` | 21.0.4 | teste | 8,8 MB | DOM dos testes; ver decisão (e). |
 | `eslint`, `typescript-eslint`, `eslint-plugin-react-hooks` | 10.15.0, 8.74.0, 7.1.1 | lint | 2,8 MB, 42 KB, 3,9 MB | Lint com tipos e regras de hooks. Sem Prettier (decisão (g)). |
 | `@types/react`, `@types/react-dom` | 19.3.0, 19.3.0 | build | 399 KB, 32 KB | Tipos. |
